@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self'; img-src 'self' data: https: http:; media-src blob:">
+  <title>voxo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <form id="url-form" class="address" autocomplete="off">
+      <label class="sr-only" for="url">Web address</label>
+      <input id="url" type="text" inputmode="url" spellcheck="false" placeholder="Paste a web address">
+      <button id="go" type="submit">Read page</button>
+    </form>
+    <button id="text-open" class="source-button" type="button">Paste text</button>
+    <button id="pdf-open" class="source-button" type="button">Open PDF</button>
+
+    <details id="options" class="options">
+      <summary>Voice</summary>
+      <div class="panel">
+        <label class="field">
+          <span>Engine</span>
+          <select id="engine"></select>
+        </label>
+        <label class="field">
+          <span>Voice</span>
+          <select id="voice"></select>
+        </label>
+        <label class="check">
+          <input id="allow-download" type="checkbox">
+          <span>Allow model downloads</span>
+        </label>
+        <p class="hint">Off by default so nothing is fetched. Turn it on once to get a missing voice or model.</p>
+        <details class="log-box">
+          <summary>Speech worker log</summary>
+          <pre id="log" tabindex="0"></pre>
+        </details>
+      </div>
+    </details>
+  </header>
+
+  <dialog id="text-dialog" class="text-dialog">
+    <form id="text-form" method="dialog">
+      <h2>Read custom text</h2>
+      <label class="sr-only" for="custom-text">Text to read</label>
+      <textarea id="custom-text" placeholder="Paste or type text here…" required></textarea>
+      <div class="dialog-actions">
+        <button id="text-cancel" class="source-button" type="button">Cancel</button>
+        <button id="text-submit" type="submit">Read text</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="banner" class="banner" role="alert" hidden>
+    <div>
+      <p id="banner-text"></p>
+      <p id="banner-hint" class="banner-hint" hidden></p>
+    </div>
+    <button id="banner-close" type="button" aria-label="Dismiss message">Dismiss</button>
+  </div>
+
+  <main id="scroller" class="scroller">
+    <section id="empty" class="empty">
+      <h1>Listen to what you read.</h1>
+      <p>Open a web page, paste your own text, or choose a PDF. voxo reads it aloud with a voice running on this computer.</p>
+      <p>Press space to play or pause, and the arrow keys to move between paragraphs. Click any paragraph to start reading from there.</p>
+    </section>
+
+    <article id="article" class="page" hidden>
+      <div id="marker" class="marker" aria-hidden="true"></div>
+      <h1 id="title" class="title block" title="Read from the start"></h1>
+      <p id="meta" class="meta"></p>
+      <details id="pdf-preview" class="pdf-preview" hidden>
+        <summary id="pdf-preview-title">PDF page previews</summary>
+        <div id="pdf-preview-pages"></div>
+      </details>
+      <div id="body"></div>
+    </article>
+  </main>
+
+  <footer class="dock">
+    <div class="progress" aria-hidden="true"><div id="progress-fill"></div></div>
+    <div class="controls">
+      <button id="prev" class="icon" type="button" aria-label="Previous paragraph" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9.5 12z"/></svg>
+      </button>
+      <button id="play" class="icon play" type="button" aria-label="Play" disabled>
+        <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+      </button>
+      <button id="next" class="icon" type="button" aria-label="Next paragraph" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l10.5-7z"/></svg>
+      </button>
+    </div>
+    <div class="readout" aria-live="polite">
+      <span id="status">Open a page to begin.</span>
+      <span id="left" class="left"></span>
+    </div>
+    <label class="speed">
+      <span class="sr-only">Speed</span>
+      <select id="speed">
+        <option value="0.8">0.8×</option>
+        <option value="0.9">0.9×</option>
+        <option value="1" selected>1×</option>
+        <option value="1.1">1.1×</option>
+        <option value="1.25">1.25×</option>
+        <option value="1.5">1.5×</option>
+        <option value="1.75">1.75×</option>
+        <option value="2">2×</option>
+      </select>
+    </label>
+  </footer>
+
+  <script type="module" src="renderer.js"></script>
+</body>
+</html>

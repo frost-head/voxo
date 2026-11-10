@@ -1,0 +1,9 @@
+node_modules/
+build/
+dist/
+.venv-build/
+tts/venv/
+tts/models/
+__pycache__/
+*.py[cod]
+*.wav

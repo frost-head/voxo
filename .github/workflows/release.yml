@@ -1,0 +1,80 @@
+name: Build and release voxo
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            target: mac-arm64
+            binary: voxo-tts
+            artifact: "dist/*.dmg"
+          - runner: macos-26-intel
+            target: mac-x64
+            binary: voxo-tts
+            artifact: "dist/*.dmg"
+          - runner: windows-2025
+            target: win-x64
+            binary: voxo-tts.exe
+            artifact: "dist/*.exe"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - name: Install bundled speech runtime dependencies
+        run: python -m pip install -r packaging/requirements-tts.txt
+      - name: Freeze Python speech runtime
+        run: npm run build:tts
+      - name: Check frozen speech runtime
+        shell: bash
+        run: |
+          build/tts/voxo-tts/${{ matrix.binary }} --voices-json
+          mkdir -p build/tts-data/voices
+          cp tts/voices/en_US-amy-medium.onnx tts/voices/en_US-amy-medium.onnx.json build/tts-data/voices/
+          VOXO_TTS_DATA="$PWD/build/tts-data" build/tts/voxo-tts/${{ matrix.binary }} "Voxo release smoke check." --engine piper --output build/tts-smoke.wav
+      - name: Build installer
+        env:
+          CSC_LINK: ${{ runner.os == 'Windows' && secrets.WIN_CSC_LINK || secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'Windows' && secrets.WIN_CSC_KEY_PASSWORD || secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run package:${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voxo-${{ matrix.target }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-files
+          merge-multiple: true
+      - name: Generate SHA-256 checksums
+        run: sha256sum release-files/* > release-files/SHA256SUMS.txt
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release-files/* --title "$GITHUB_REF_NAME" --generate-notes
