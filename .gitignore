@@ -2,3 +2,5 @@ node_modules/
 build/
 dist/
 *.wav
+assets/icon.iconset/
+assets/icon.icns
