@@ -1,12 +1,8 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
-const path = require('path');
-
 const { extractArticle, splitIntoChunks, cleanForSpeech } = require('../lib/extract');
 const { loadArticle, normalizeUrl } = require('../lib/loader');
-const { TtsWorker } = require('../lib/tts-worker');
 
 const ARTICLE_HTML = `<!doctype html><html><head><title>Why Bees Matter | Example News</title></head><body>
 <nav><a href="/">Home</a> <a href="/about">About</a> <a href="/subscribe">Subscribe now</a></nav>
@@ -151,72 +147,4 @@ test('loader falls back to rendering when the download fails, and reports the re
     loadArticle('https://example.com/x', { fetchHtml: async () => '<html></html>', renderHtml: async () => '<html></html>' }),
     /Could not find the main article text/
   );
-});
-
-// ---------------------------------------------------------------- speech worker
-const SCRIPT = path.join(__dirname, 'fake_serve.py');
-const makeWorker = () => new TtsWorker({ python: process.env.PYTHON || 'python3', script: SCRIPT, args: [] });
-
-test('worker: synthesizes in order, returns real WAV files, ignores engine chatter', async () => {
-  const worker = makeWorker();
-  try {
-    const paths = await Promise.all(['one', 'two', 'three'].map((text) => worker.synth({ text, engine: 'kokoro', voice: 'af_heart' })));
-    assert.equal(new Set(paths).size, 3);
-    for (const p of paths) {
-      const bytes = fs.readFileSync(p);
-      assert.equal(bytes.subarray(0, 4).toString(), 'RIFF');
-      assert.ok(bytes.length > 1000);
-    }
-  } finally {
-    worker.dispose();
-  }
-});
-
-test('worker: errors reach the caller and the worker keeps going', async () => {
-  const worker = makeWorker();
-  try {
-    await assert.rejects(worker.synth({ text: 'FAIL please' }), /RuntimeError: boom/);
-    await assert.rejects(worker.synth({ text: 'NEEDS-DOWNLOAD' }), /allow-download/);
-    await assert.rejects(worker.synth({ text: '   ' }), /No text to speak/);
-    const wav = await worker.synth({ text: 'fine now' });
-    assert.ok(fs.existsSync(wav));
-  } finally {
-    worker.dispose();
-  }
-});
-
-test('worker: cancelQueued drops waiting requests but lets the running one finish', async () => {
-  const worker = makeWorker();
-  try {
-    const running = worker.synth({ text: 'SLOW running' });
-    const waiting = [worker.synth({ text: 'a' }), worker.synth({ text: 'b' })];
-    const outcomes = waiting.map((p) => p.then(() => 'done', (e) => (e.cancelled ? 'cancelled' : `error: ${e.message}`)));
-    await new Promise((r) => setTimeout(r, 200));
-    worker.cancelQueued();
-    assert.deepEqual(await Promise.all(outcomes), ['cancelled', 'cancelled']);
-    assert.ok(fs.existsSync(await running));
-    assert.ok(fs.existsSync(await worker.synth({ text: 'after cancel' })));
-  } finally {
-    worker.dispose();
-  }
-});
-
-test('worker: a crash fails pending requests and the next request starts a fresh worker', async () => {
-  const worker = makeWorker();
-  try {
-    await assert.rejects(worker.synth({ text: 'DIE now' }), /worker stopped/);
-    const wav = await worker.synth({ text: 'recovered' });
-    assert.ok(fs.existsSync(wav));
-  } finally {
-    worker.dispose();
-  }
-});
-
-test('worker: a missing Python reports a clear error', async () => {
-  const worker = new TtsWorker({ python: '/nonexistent/python', script: SCRIPT });
-  try {
-    await assert.rejects(worker.synth({ text: 'hello' }), /Could not start Python/);
-  } finally {
-    worker.dispose();
-  }
 });

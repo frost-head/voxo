@@ -4,38 +4,74 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self'; img-src 'self' data: https: http:; media-src blob:">
+        content="default-src 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self'; img-src 'self' data: https: http:; media-src blob:; connect-src voxo-pdf:">
   <title>voxo</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="bar">
+    <div class="brand">
+      <img src="../assets/icon.svg" alt="">
+      <span>voxo</span>
+    </div>
     <form id="url-form" class="address" autocomplete="off">
-      <label class="sr-only" for="url">Web address</label>
-      <input id="url" type="text" inputmode="url" spellcheck="false" placeholder="Paste a web address">
-      <button id="go" type="submit">Read page</button>
+      <label class="sr-only" for="url">Article link</label>
+      <input id="url" type="text" inputmode="url" spellcheck="false" placeholder="Paste an article link">
+      <button id="go" type="submit">Open article</button>
     </form>
-    <button id="text-open" class="source-button" type="button">Paste text</button>
+    <button id="text-open" class="source-button" type="button">Add text</button>
     <button id="pdf-open" class="source-button" type="button">Open PDF</button>
+    <button id="library-open" class="source-button" type="button">Library</button>
+
+    <details id="reading-settings" class="options">
+      <summary>Reading</summary>
+      <div class="panel reading-panel">
+        <p class="panel-title">Make it yours</p>
+        <label class="field">
+          <span>Color theme</span>
+          <select id="color-theme">
+            <option value="system">Use system setting</option>
+            <option value="light">Warm light</option>
+            <option value="dark">Soft dark</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Font style</span>
+          <select id="font-style">
+            <option value="serif">Book serif</option>
+            <option value="sans">Clean sans serif</option>
+          </select>
+        </label>
+        <label class="field range-field">
+          <span>Text size <output id="font-size-value" for="font-size">20 px</output></span>
+          <input id="font-size" type="range" min="16" max="28" step="1" value="20">
+        </label>
+        <label class="field range-field">
+          <span>Line width <output id="line-width-value" for="line-width">96 chars</output></span>
+          <input id="line-width" type="range" min="60" max="112" step="2" value="96">
+        </label>
+        <label class="field range-field">
+          <span>Line spacing <output id="line-spacing-value" for="line-spacing">1.8×</output></span>
+          <input id="line-spacing" type="range" min="1.4" max="2.2" step="0.1" value="1.8">
+        </label>
+      </div>
+    </details>
 
     <details id="options" class="options">
       <summary>Voice</summary>
       <div class="panel">
-        <label class="field">
-          <span>Engine</span>
-          <select id="engine"></select>
-        </label>
+        <p class="panel-title">Spoken audio</p>
         <label class="field">
           <span>Voice</span>
           <select id="voice"></select>
         </label>
         <label class="check">
           <input id="allow-download" type="checkbox">
-          <span>Allow model downloads</span>
+          <span>Allow voice model download</span>
         </label>
-        <p class="hint">Off by default so nothing is fetched. Turn it on once to get a missing voice or model.</p>
+        <p class="hint">Turn this on once, then press play to download the voice to this device.</p>
         <details class="log-box">
-          <summary>Speech worker log</summary>
+          <summary>Audio setup details</summary>
           <pre id="log" tabindex="0"></pre>
         </details>
       </div>
@@ -44,14 +80,55 @@
 
   <dialog id="text-dialog" class="text-dialog">
     <form id="text-form" method="dialog">
-      <h2>Read custom text</h2>
+      <h2>Add text to your reading room</h2>
       <label class="sr-only" for="custom-text">Text to read</label>
-      <textarea id="custom-text" placeholder="Paste or type text here…" required></textarea>
+      <textarea id="custom-text" placeholder="Paste or write anything you’d like to hear…" required></textarea>
       <div class="dialog-actions">
         <button id="text-cancel" class="source-button" type="button">Cancel</button>
-        <button id="text-submit" type="submit">Read text</button>
+        <button id="text-submit" type="submit">Open in reader</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="note-dialog" class="note-dialog">
+    <form id="note-form" method="dialog">
+      <p class="dialog-eyebrow">A thought to keep</p>
+      <h2>Add a note</h2>
+      <blockquote id="note-quote" class="note-quote"></blockquote>
+      <label class="note-label" for="note-body">Your note</label>
+      <textarea id="note-body" maxlength="20000" placeholder="Write what you want to remember…" required></textarea>
+      <div class="dialog-actions">
+        <button id="note-cancel" class="source-button" type="button">Cancel</button>
+        <button id="note-submit" type="submit">Save note</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="library-dialog" class="library-dialog">
+    <div class="library-shell">
+      <header class="library-header">
+        <div>
+          <p class="dialog-eyebrow">YOUR VOXO LIBRARY</p>
+          <h2>Your reading life, in one place.</h2>
+          <p class="library-intro">Pick up where you left off, revisit a saved passage, or find a thought you wrote down.</p>
+        </div>
+        <button id="library-close" class="close-button" type="button" aria-label="Close library">×</button>
+      </header>
+      <nav class="library-tabs" role="tablist" aria-label="Library sections">
+        <button class="library-tab" type="button" role="tab" data-library-tab="history" aria-selected="true">History</button>
+        <button class="library-tab" type="button" role="tab" data-library-tab="saved" aria-selected="false">Saved</button>
+        <button class="library-tab" type="button" role="tab" data-library-tab="notes" aria-selected="false">Notes</button>
+      </nav>
+      <section class="library-content" role="tabpanel" aria-live="polite">
+        <ul id="library-list" class="library-list"></ul>
+        <div id="library-empty" class="library-empty" hidden>
+          <div class="library-empty-mark" aria-hidden="true">✦</div>
+          <h3 id="library-empty-title"></h3>
+          <p id="library-empty-hint"></p>
+        </div>
+      </section>
+      <footer class="library-footer">Your library is stored on this device.</footer>
+    </div>
   </dialog>
 
   <div id="banner" class="banner" role="alert" hidden>
@@ -64,18 +141,52 @@
 
   <main id="scroller" class="scroller">
     <section id="empty" class="empty">
-      <h1>Listen to what you read.</h1>
-      <p>Open a web page, paste your own text, or choose a PDF. voxo reads it aloud with a voice running on this computer.</p>
-      <p>Press space to play or pause, and the arrow keys to move between paragraphs. Click any paragraph to start reading from there.</p>
+      <div class="welcome-brand">
+        <img src="../assets/icon.svg" alt="">
+        <span>A calmer way to catch up</span>
+      </div>
+      <h1>Your next good read starts here.</h1>
+      <p class="welcome-copy">Bring in an article, a document, or your own words. Settle in, make the page yours, and listen whenever you’re ready.</p>
+      <div class="source-cards" aria-label="Ways to start">
+        <div class="source-card">
+          <span class="source-card-icon" aria-hidden="true">↗</span>
+          <span class="source-card-title">An article</span>
+          <span class="source-card-hint">Add a link above</span>
+        </div>
+        <div class="source-card">
+          <span class="source-card-icon source-card-pdf" aria-hidden="true">PDF</span>
+          <span class="source-card-title">A PDF</span>
+          <span class="source-card-hint">Open a PDF</span>
+        </div>
+        <div class="source-card">
+          <span class="source-card-icon source-card-text" aria-hidden="true">Aa</span>
+          <span class="source-card-title">Your own text</span>
+          <span class="source-card-hint">Paste or write it</span>
+        </div>
+      </div>
+      <p class="welcome-note">Choose a source to begin. You can tune the reading style any time.</p>
     </section>
 
     <article id="article" class="page" hidden>
       <div id="marker" class="marker" aria-hidden="true"></div>
+      <div class="source-header-actions">
+        <p id="source-label" class="source-label"></p>
+        <button id="bookmark-toggle" class="bookmark-toggle" type="button" aria-pressed="false">Save</button>
+      </div>
       <h1 id="title" class="title block" title="Read from the start"></h1>
       <p id="meta" class="meta"></p>
+      <aside id="note-callout" class="note-callout" hidden>
+        <div>
+          <p class="note-callout-label">YOUR NOTE</p>
+          <blockquote id="note-callout-quote"></blockquote>
+          <p id="note-callout-body"></p>
+        </div>
+        <button id="note-callout-close" type="button" aria-label="Close note">×</button>
+      </aside>
       <details id="pdf-preview" class="pdf-preview" hidden>
         <summary id="pdf-preview-title">PDF page previews</summary>
         <div id="pdf-preview-pages"></div>
+        <button id="pdf-preview-more" class="source-button" type="button" hidden>Show more pages</button>
       </details>
       <div id="body"></div>
     </article>
@@ -96,21 +207,13 @@
       </button>
     </div>
     <div class="readout" aria-live="polite">
-      <span id="status">Open a page to begin.</span>
+      <span id="status">Choose something to read.</span>
       <span id="left" class="left"></span>
     </div>
     <label class="speed">
-      <span class="sr-only">Speed</span>
-      <select id="speed">
-        <option value="0.8">0.8×</option>
-        <option value="0.9">0.9×</option>
-        <option value="1" selected>1×</option>
-        <option value="1.1">1.1×</option>
-        <option value="1.25">1.25×</option>
-        <option value="1.5">1.5×</option>
-        <option value="1.75">1.75×</option>
-        <option value="2">2×</option>
-      </select>
+      <span>Speed</span>
+      <output id="speed-value" for="speed">1.0×</output>
+      <input id="speed" type="range" min="0.6" max="2.4" step="0.1" value="1" aria-label="Reading speed" aria-valuetext="1 times speed">
     </label>
   </footer>
 

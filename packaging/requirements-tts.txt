@@ -1,8 +1,0 @@
-numpy<2
-onnxruntime==1.23.2
-kokoro-onnx
-piper-tts
-torch==2.2.2
-transformers<5
-language-tags
-pyinstaller

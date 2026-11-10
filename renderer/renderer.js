@@ -3,26 +3,41 @@ import * as pdfjsLib from '../node_modules/pdfjs-dist/build/pdf.mjs';
 'use strict';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('../node_modules/pdfjs-dist/build/pdf.worker.mjs', import.meta.url).toString();
+const standardFontDataUrl = 'voxo-pdf://pdfjs/standard_fonts/';
+const cMapUrl = 'voxo-pdf://pdfjs/cmaps/';
 
 const api = window.readerApi;
 const $ = (selector) => document.querySelector(selector);
 
 const els = {
   form: $('#url-form'), url: $('#url'), go: $('#go'),
-  textOpen: $('#text-open'), pdfOpen: $('#pdf-open'), textDialog: $('#text-dialog'), textForm: $('#text-form'), customText: $('#custom-text'), textCancel: $('#text-cancel'), textSubmit: $('#text-submit'),
-  options: $('#options'), engine: $('#engine'), voice: $('#voice'), allowDownload: $('#allow-download'), log: $('#log'),
+  textOpen: $('#text-open'), pdfOpen: $('#pdf-open'), libraryOpen: $('#library-open'),
+  textDialog: $('#text-dialog'), textForm: $('#text-form'), customText: $('#custom-text'), textCancel: $('#text-cancel'), textSubmit: $('#text-submit'),
+  noteDialog: $('#note-dialog'), noteForm: $('#note-form'), noteQuote: $('#note-quote'), noteBody: $('#note-body'), noteCancel: $('#note-cancel'), noteSubmit: $('#note-submit'),
+  libraryDialog: $('#library-dialog'), libraryClose: $('#library-close'), libraryList: $('#library-list'), libraryEmpty: $('#library-empty'), libraryEmptyTitle: $('#library-empty-title'), libraryEmptyHint: $('#library-empty-hint'),
+  options: $('#options'), voice: $('#voice'), allowDownload: $('#allow-download'), log: $('#log'),
+  colorTheme: $('#color-theme'), fontStyle: $('#font-style'), fontSize: $('#font-size'), fontSizeValue: $('#font-size-value'),
+  lineWidth: $('#line-width'), lineWidthValue: $('#line-width-value'), lineSpacing: $('#line-spacing'), lineSpacingValue: $('#line-spacing-value'),
   banner: $('#banner'), bannerText: $('#banner-text'), bannerHint: $('#banner-hint'), bannerClose: $('#banner-close'),
   scroller: $('#scroller'), empty: $('#empty'), article: $('#article'),
-  marker: $('#marker'), title: $('#title'), meta: $('#meta'), body: $('#body'),
-  pdfPreview: $('#pdf-preview'), pdfPreviewTitle: $('#pdf-preview-title'), pdfPreviewPages: $('#pdf-preview-pages'),
+  marker: $('#marker'), sourceLabel: $('#source-label'), bookmarkToggle: $('#bookmark-toggle'), title: $('#title'), meta: $('#meta'), body: $('#body'),
+  noteCallout: $('#note-callout'), noteCalloutQuote: $('#note-callout-quote'), noteCalloutBody: $('#note-callout-body'), noteCalloutClose: $('#note-callout-close'),
+  pdfPreview: $('#pdf-preview'), pdfPreviewTitle: $('#pdf-preview-title'), pdfPreviewPages: $('#pdf-preview-pages'), pdfPreviewMore: $('#pdf-preview-more'),
   prev: $('#prev'), play: $('#play'), next: $('#next'),
-  status: $('#status'), left: $('#left'), speed: $('#speed'), fill: $('#progress-fill'),
+  status: $('#status'), left: $('#left'), speed: $('#speed'), speedValue: $('#speed-value'), fill: $('#progress-fill'),
 };
 const readout = els.status.parentElement;
 
 const WORDS_PER_MINUTE = 150; // typical speaking pace at 1x
 const AHEAD = 2;              // chunks synthesized in advance
+const PDF_PREVIEW_BATCH_SIZE = 8;
+const INLINE_TAGS = new Set(['strong', 'em', 'mark', 'code', 'kbd', 'sup', 'sub', 'del', 'ins', 'small', 'abbr', 'p', 'br', 'span']);
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const systemDarkMode = window.matchMedia('(prefers-color-scheme: dark)');
+const clampSetting = (value, min, max, fallback) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+};
 
 // ---------------------------------------------------------------- saved settings
 const store = {
@@ -49,11 +64,22 @@ const state = {
   playing: false,
   phase: 'empty',    // empty | ready | preparing | reading | paused | done
   gen: 0,            // bumped whenever queued audio becomes stale
-  engine: 'kokoro',
   voice: null,
-  speed: store.get('speed', 1),
+  speed: clampSetting(store.get('speed', 1), 0.6, 2.4, 1),
+  libraryItemId: null,
+  isSaved: false,
+};
+const readingSettings = {
+  theme: ['system', 'light', 'dark'].includes(store.get('reading.theme', 'system')) ? store.get('reading.theme', 'system') : 'system',
+  font: ['serif', 'sans'].includes(store.get('reading.font', 'serif')) ? store.get('reading.font', 'serif') : 'serif',
+  fontSize: clampSetting(store.get('reading.fontSize', 20), 16, 28, 20),
+  lineWidth: clampSetting(store.get('reading.lineWidth', 96), 60, 112, 96),
+  lineSpacing: Math.round(clampSetting(store.get('reading.lineSpacing', 1.8), 1.4, 2.2, 1.8) * 10) / 10,
 };
 let voicesInfo = null;
+let pdfPreviewState = null;
+let pendingNote = null;
+let activeLibrarySection = 'history';
 
 const audio = new Audio();
 const cache = new Map(); // unit index -> { url, promise }
@@ -62,7 +88,7 @@ const cache = new Map(); // unit index -> { url, promise }
 function showError(message, hint) {
   els.bannerText.textContent = message;
   if (!hint && /allow-download/.test(message)) {
-    hint = 'Open Voice, turn on "Allow model downloads", and press play again.';
+    hint = 'Open Voice settings, allow the voice model download, then press play again.';
   }
   els.bannerHint.textContent = hint || '';
   els.bannerHint.hidden = !hint;
@@ -81,8 +107,8 @@ function renderStatus(override) {
   const block = unit && state.blocks[unit.blockIndex];
   const where = block && block.speakNumber ? `paragraph ${block.speakNumber} of ${state.speakableBlocks}` : '';
   const text = {
-    empty: 'Open a page, paste text, or choose a PDF to begin.',
-    ready: 'Ready. Press play, or click a paragraph to start there.',
+    empty: 'Choose something to read.',
+    ready: 'Ready. Press play or choose a paragraph.',
     preparing: 'Preparing the voice…',
     reading: where ? `Reading ${where}` : 'Reading',
     paused: where ? `Paused at ${where}` : 'Paused',
@@ -111,59 +137,232 @@ function syncButtons() {
 }
 
 // ---------------------------------------------------------------- article rendering
+function inlineNodes(runs) {
+  return (runs || []).flatMap((run) => {
+    if (Object.hasOwn(run, 'text')) return [document.createTextNode(run.text)];
+    if (!INLINE_TAGS.has(run.tag)) return inlineNodes(run.children);
+    const el = document.createElement(run.tag);
+    if (run.tag === 'span' && run.className === 'inline-link') el.className = 'inline-link';
+    el.append(...inlineNodes(run.children));
+    return [el];
+  });
+}
+
 function elementFor(block) {
   let el;
   if (block.type === 'image') {
     el = document.createElement('figure');
     el.className = 'image-block';
     const image = document.createElement('img');
-    image.src = block.src;
     image.alt = block.alt || '';
+    if (block.srcSet) image.srcset = block.srcSet;
+    image.sizes = '(max-width: 40rem) calc(100vw - 3rem), (max-width: 73.5rem) 68vw, 50rem';
+    image.src = block.src;
     image.loading = 'lazy';
     image.decoding = 'async';
     image.referrerPolicy = 'no-referrer';
+    image.addEventListener('error', () => {
+      const caption = document.createElement('figcaption');
+      caption.textContent = block.alt ? `Image unavailable: ${block.alt}` : 'Image unavailable';
+      el.replaceChildren(caption);
+      el.classList.add('image-unavailable');
+    }, { once: true });
     el.appendChild(image);
     return el;
   }
   if (block.type === 'heading') el = document.createElement(`h${Math.min(Math.max(block.level, 2), 4)}`);
   else if (block.type === 'code') el = document.createElement('pre');
+  else if (block.type === 'quote') el = document.createElement('blockquote');
   else el = document.createElement('p');
-  if (block.type === 'li') el.className = 'item';
+  if (block.type === 'li') {
+    el.className = `item${block.marker ? ' ordered' : ''}`;
+    if (block.marker) el.dataset.marker = block.marker;
+    const depth = Math.min(Math.max(Number(block.level) || 0, 0), 6);
+    el.style.setProperty('--list-indent', `${depth * 0.9}rem`);
+  }
   if (block.type === 'caption') el.className = 'caption';
-  el.textContent = block.text; // plain text only
+  if (block.inline) el.replaceChildren(...inlineNodes(block.inline));
+  else el.textContent = block.text;
   return el;
 }
 
-function renderArticle(article) {
+function attachNoteAction(el, entry, blockIndex) {
+  if (!['title', 'heading', 'p', 'li', 'quote'].includes(entry.data.type) || !state.libraryItemId) return;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'note-action';
+  button.setAttribute('aria-label', `Add a note to this ${entry.data.type === 'li' ? 'list item' : 'passage'}`);
+  button.title = 'Add a note to this passage';
+  button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5V20h3.5L19 8.5 15.5 5 4 16.5Zm17.7-10.3a1 1 0 0 0 0-1.4l-2.5-2.5a1 1 0 0 0-1.4 0l-1.7 1.7 3.5 3.5 2.1-1.3Z"/></svg>';
+  button.addEventListener('mousedown', (event) => event.preventDefault());
+  button.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const block = state.blocks[blockIndex];
+    if (block) openNoteEditor(block);
+  });
+  el.appendChild(button);
+}
+
+function clearPdfPreview() {
+  const previous = pdfPreviewState;
+  pdfPreviewState = null;
+  els.pdfPreview.open = false;
+  if (previous) {
+    for (const url of previous.objectUrls) URL.revokeObjectURL(url);
+    const doc = previous.documentPromise;
+    if (doc) doc.then((pdf) => pdf.destroy()).catch(() => {});
+    else previous.document?.destroy().catch(() => {});
+  }
+  els.pdfPreviewPages.replaceChildren();
+  els.pdfPreviewMore.hidden = true;
+  els.pdfPreviewMore.disabled = false;
+}
+
+function updatePdfPreviewControls(state) {
+  if (state !== pdfPreviewState) return;
+  const rendered = state.nextPage - 1;
+  els.pdfPreviewTitle.textContent = rendered
+    ? `PDF page previews · ${rendered} of ${state.pageCount}`
+    : `PDF page previews · ${state.pageCount} pages`;
+  const batchSize = state.nextPage === 1 ? 1 : PDF_PREVIEW_BATCH_SIZE;
+  const count = Math.min(batchSize, state.pageCount - rendered);
+  els.pdfPreviewMore.textContent = state.loading
+    ? 'Preparing page previews…'
+    : `Show ${rendered ? 'next ' : ''}${count} ${count === 1 ? 'page' : 'pages'}`;
+  els.pdfPreviewMore.disabled = state.loading;
+  els.pdfPreviewMore.hidden = rendered >= state.pageCount;
+}
+
+async function loadPdfPreviewBatch() {
+  const state = pdfPreviewState;
+  if (!state || state.loading || state.nextPage > state.pageCount) return;
+  state.loading = true;
+  updatePdfPreviewControls(state);
+
+  try {
+    if (!state.documentPromise) {
+      state.documentPromise = pdfjsLib.getDocument({
+        data: state.data,
+        standardFontDataUrl,
+        cMapUrl,
+        cMapPacked: true,
+        // PDF.js only treats HTTP(S) as a worker-fetch URL. Keep font and CMap
+        // requests on its main-thread factories so Electron's voxo-pdf scheme
+        // is fetched through the registered protocol handler.
+        useWorkerFetch: false,
+        isEvalSupported: false,
+      }).promise;
+    }
+    state.document = await state.documentPromise;
+    state.data = null;
+    if (state !== pdfPreviewState) return;
+
+    const batchSize = state.nextPage === 1 ? 1 : PDF_PREVIEW_BATCH_SIZE;
+    const endPage = Math.min(state.pageCount, state.nextPage + batchSize - 1);
+    for (let pageNumber = state.nextPage; pageNumber <= endPage; pageNumber += 1) {
+      if (state !== pdfPreviewState) return;
+      const page = await state.document.getPage(pageNumber);
+      const canvas = document.createElement('canvas');
+      let viewport;
+      let blob;
+      try {
+        const baseViewport = page.getViewport({ scale: 1 });
+        viewport = page.getViewport({ scale: Math.min(1.5, 1100 / baseViewport.width, 1800 / baseViewport.height) });
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        const context = canvas.getContext('2d', { alpha: false });
+        if (!context) throw new Error('This window could not create a PDF preview canvas.');
+        context.fillStyle = '#fff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: context, viewport }).promise;
+        blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.78));
+      } finally {
+        page.cleanup();
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+      if (!blob) throw new Error(`Could not create a preview for page ${pageNumber}.`);
+      if (state !== pdfPreviewState) return;
+
+      const src = URL.createObjectURL(blob);
+      state.objectUrls.push(src);
+      const figure = document.createElement('figure');
+      figure.className = 'pdf-page';
+      const image = document.createElement('img');
+      image.src = src;
+      image.alt = `PDF page ${pageNumber}`;
+      image.width = Math.ceil(viewport.width);
+      image.height = Math.ceil(viewport.height);
+      image.loading = 'lazy';
+      image.decoding = 'async';
+      const caption = document.createElement('figcaption');
+      caption.textContent = `Page ${pageNumber}`;
+      figure.append(image, caption);
+      els.pdfPreviewPages.appendChild(figure);
+      state.nextPage = pageNumber + 1;
+      updatePdfPreviewControls(state);
+    }
+  } catch (error) {
+    if (state === pdfPreviewState) {
+      if (!state.document) state.documentPromise = null;
+      showError(`Could not render PDF page previews: ${error.message || error}`);
+    }
+  } finally {
+    if (state === pdfPreviewState) {
+      state.loading = false;
+      updatePdfPreviewControls(state);
+    }
+  }
+}
+
+function renderArticle(article, pdfData = null, libraryItemId = null, isSaved = false, fileUnavailable = false) {
+  clearPdfPreview();
+  clearActiveNote();
+  state.libraryItemId = libraryItemId;
+  state.isSaved = Boolean(isSaved);
+  els.bookmarkToggle.hidden = !libraryItemId;
+  els.bookmarkToggle.textContent = state.isSaved ? 'Saved' : 'Save';
+  els.bookmarkToggle.setAttribute('aria-pressed', String(state.isSaved));
+  els.bookmarkToggle.classList.toggle('is-saved', state.isSaved);
+  const hasPdfPreview = Boolean(pdfData && article.pdfPageCount);
+  if (hasPdfPreview) {
+    pdfPreviewState = {
+      data: pdfData,
+      pageCount: article.pdfPageCount,
+      nextPage: 1,
+      document: null,
+      documentPromise: null,
+      objectUrls: [],
+      loading: false,
+    };
+    updatePdfPreviewControls(pdfPreviewState);
+  }
   stopEverything();
   els.title.classList.remove('current'); // the title element is reused between pages
 
-  els.title.textContent = article.title || article.url;
-  els.meta.replaceChildren(
-    ...[article.byline, article.siteName, article.words ? `${article.words.toLocaleString()} words, about ${Math.max(1, Math.round(article.words / WORDS_PER_MINUTE))} min` : '']
-      .filter(Boolean)
-      .map((text) => Object.assign(document.createElement('span'), { textContent: text }))
-  );
+  if (article.pdfPageCount) {
+    els.sourceLabel.textContent = `PDF · ${article.pdfPageCount} pages`;
+  } else if (/^https?:\/\//i.test(article.url || '')) {
+    let host = 'Web article';
+    try { host = new URL(article.url).hostname.replace(/^www\./i, ''); } catch { /* keep the fallback */ }
+    els.sourceLabel.textContent = `Web article · ${host}`;
+  } else {
+    els.sourceLabel.textContent = 'Your text';
+  }
 
-  const previews = article.pdfPreviews || [];
-  els.pdfPreview.hidden = previews.length === 0;
-  els.pdfPreview.open = false;
-  els.pdfPreviewTitle.textContent = article.pdfPageCount > previews.length
-    ? `Preview first ${previews.length} of ${article.pdfPageCount} PDF pages`
-    : `Preview ${previews.length} PDF pages`;
-  els.pdfPreviewPages.replaceChildren(...previews.map(({ pageNumber, src }) => {
-    const figure = document.createElement('figure');
-    figure.className = 'pdf-page';
-    const image = document.createElement('img');
-    image.src = src;
-    image.alt = `PDF page ${pageNumber}`;
-    image.loading = 'lazy';
-    image.decoding = 'async';
-    const caption = document.createElement('figcaption');
-    caption.textContent = `Page ${pageNumber}`;
-    figure.append(image, caption);
-    return figure;
-  }));
+  els.title.textContent = article.title || article.url;
+  const metaItems = [
+    article.byline,
+    article.pdfPageCount ? '' : article.siteName,
+    article.words ? `${article.words.toLocaleString()} words · about ${Math.max(1, Math.round(article.words / WORDS_PER_MINUTE))} min` : '',
+  ].filter(Boolean);
+  els.meta.replaceChildren(...metaItems.map((text) => Object.assign(document.createElement('span'), { textContent: text })));
+  els.meta.hidden = metaItems.length === 0;
+
+  els.pdfPreview.hidden = !hasPdfPreview;
+  els.pdfPreview.open = hasPdfPreview;
+  els.pdfPreviewPages.replaceChildren();
 
   state.blocks = [];
   state.units = [];
@@ -181,6 +380,7 @@ function renderArticle(article) {
     const entry = { data: block, el, firstUnit: null, speakNumber: 0 };
     const blockIndex = state.blocks.push(entry) - 1;
     el.dataset.block = String(blockIndex);
+    attachNoteAction(el, entry, blockIndex);
 
     if (block.speak && block.chunks.length) {
       entry.firstUnit = state.units.length;
@@ -202,34 +402,304 @@ function renderArticle(article) {
   els.scroller.scrollTop = 0;
   syncButtons();
   setPhase(state.units.length ? 'ready' : 'empty');
-  if (!state.units.length && previews.length) renderStatus('No selectable text. Expand the page previews to read this PDF visually.');
+  if (!state.units.length && hasPdfPreview) renderStatus('No selectable text was found. The document pages are shown below.');
   updateProgress();
   document.title = `${article.title || 'voxo'} · voxo`;
+  if (fileUnavailable) renderStatus('Saved PDF text opened. The original file is no longer available for page previews.');
 }
 
-async function renderPdfPreviews(data, pageCount) {
-  const pdf = await pdfjsLib.getDocument({ data, isEvalSupported: false }).promise;
-  const previews = [];
+els.pdfPreview.addEventListener('toggle', () => {
+  if (els.pdfPreview.open) loadPdfPreviewBatch();
+});
+els.pdfPreviewMore.addEventListener('click', loadPdfPreviewBatch);
+
+// ---------------------------------------------------------------- personal library and notes
+function textOffsetBefore(element, container, offset) {
+  if (element.querySelector('br')) return null;
   try {
-    for (let n = 1; n <= Math.min(pageCount, 100); n += 1) {
-      const page = await pdf.getPage(n);
-      const initial = page.getViewport({ scale: 1 });
-      const viewport = page.getViewport({ scale: Math.min(1.5, 1100 / initial.width) });
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.ceil(viewport.width);
-      canvas.height = Math.ceil(viewport.height);
-      const context = canvas.getContext('2d', { alpha: false });
-      context.fillStyle = '#fff';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      await page.render({ canvasContext: context, viewport }).promise;
-      previews.push({ pageNumber: n, src: canvas.toDataURL('image/jpeg', 0.76) });
-      page.cleanup();
-    }
-  } finally {
-    await pdf.destroy();
-  }
-  return previews;
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.setEnd(container, offset);
+    return range.toString().length;
+  } catch { return null; }
 }
+
+function noteAnchorFor(entry) {
+  const selection = window.getSelection();
+  if (selection?.rangeCount && !selection.isCollapsed) {
+    const range = selection.getRangeAt(0);
+    if (entry.el.contains(range.startContainer) && entry.el.contains(range.endContainer)) {
+      const raw = range.toString();
+      const quote = raw.trim();
+      if (quote) {
+        const leading = raw.length - raw.trimStart().length;
+        const trailing = raw.length - raw.trimEnd().length;
+        const start = textOffsetBefore(entry.el, range.startContainer, range.startOffset);
+        const end = textOffsetBefore(entry.el, range.endContainer, range.endOffset);
+        return {
+          blockIndex: Number(entry.el.dataset.block),
+          startOffset: start === null ? null : start + leading,
+          endOffset: end === null ? null : Math.max(start + leading, end - trailing),
+          quote,
+        };
+      }
+    }
+  }
+  return {
+    blockIndex: Number(entry.el.dataset.block),
+    startOffset: null,
+    endOffset: null,
+    quote: String(entry.data.text || '').trim(),
+  };
+}
+
+function openNoteEditor(entry) {
+  if (!state.libraryItemId) {
+    showError('This passage could not be added to your library.');
+    return;
+  }
+  pendingNote = noteAnchorFor(entry);
+  if (!pendingNote.quote) {
+    showError('Select a line or paragraph before adding a note.');
+    return;
+  }
+  els.noteQuote.textContent = pendingNote.quote;
+  els.noteBody.value = '';
+  els.noteDialog.showModal();
+  requestAnimationFrame(() => els.noteBody.focus());
+}
+
+function clearActiveNote() {
+  document.querySelectorAll('.note-target').forEach((el) => el.classList.remove('note-target'));
+  if (globalThis.CSS?.highlights) CSS.highlights.delete('voxo-note-anchor');
+  els.noteCallout.hidden = true;
+  els.meta.after(els.noteCallout);
+}
+
+function highlightSavedText(element, startOffset, endOffset) {
+  if (!globalThis.CSS?.highlights || typeof globalThis.Highlight !== 'function') return;
+  if (!Number.isInteger(startOffset) || !Number.isInteger(endOffset) || endOffset <= startOffset) return;
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  let current = 0;
+  let start = null;
+  let end = null;
+  let node;
+  while ((node = walker.nextNode())) {
+    const next = current + node.textContent.length;
+    if (!start && startOffset >= current && startOffset <= next) {
+      start = { node, offset: startOffset - current };
+    }
+    if (start && endOffset >= current && endOffset <= next) {
+      end = { node, offset: endOffset - current };
+      break;
+    }
+    current = next;
+  }
+  if (!start || !end) return;
+  const range = document.createRange();
+  range.setStart(start.node, start.offset);
+  range.setEnd(end.node, end.offset);
+  CSS.highlights.set('voxo-note-anchor', new Highlight(range));
+}
+
+function showNoteAtAnchor(note) {
+  clearActiveNote();
+  const entry = state.blocks[Number(note.blockIndex)];
+  if (!entry) {
+    showError('The saved note could not find its passage in this reading.');
+    return;
+  }
+  entry.el.classList.add('note-target');
+  highlightSavedText(entry.el, note.startOffset, note.endOffset);
+  els.noteCalloutQuote.textContent = note.quote;
+  els.noteCalloutBody.textContent = note.body;
+  els.noteCallout.hidden = false;
+  entry.el.insertAdjacentElement('afterend', els.noteCallout);
+  entry.el.scrollIntoView({ block: 'center', behavior: reducedMotion ? 'auto' : 'smooth' });
+}
+
+els.noteCalloutClose.addEventListener('click', clearActiveNote);
+els.noteCancel.addEventListener('click', () => {
+  pendingNote = null;
+  els.noteDialog.close();
+});
+els.noteForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!pendingNote || !state.libraryItemId) return;
+  els.noteSubmit.disabled = true;
+  const note = { ...pendingNote, itemId: state.libraryItemId, body: els.noteBody.value };
+  const result = await api.addNote(note);
+  els.noteSubmit.disabled = false;
+  if (!result.ok) { showError(result.error); return; }
+  els.noteDialog.close();
+  pendingNote = null;
+  showNoteAtAnchor(note);
+});
+
+function formatLibraryDate(value) {
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value));
+}
+
+function sourceTypeLabel(type) {
+  return ({ article: 'ARTICLE', pdf: 'PDF', text: 'YOUR TEXT' })[type] || 'READING';
+}
+
+function setLibrarySection(section) {
+  activeLibrarySection = section;
+  document.querySelectorAll('[data-library-tab]').forEach((tab) => {
+    tab.setAttribute('aria-selected', String(tab.dataset.libraryTab === section));
+  });
+}
+
+function makeLibrarySourceRow(item) {
+  const row = document.createElement('li');
+  row.className = 'library-row';
+
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'library-entry-button';
+  open.dataset.openItem = item.id;
+  const type = document.createElement('span');
+  type.className = 'library-type';
+  type.textContent = sourceTypeLabel(item.type);
+  const title = document.createElement('strong');
+  title.className = 'library-entry-title';
+  title.textContent = item.title || 'Untitled reading';
+  const detail = document.createElement('span');
+  detail.className = 'library-entry-detail';
+  const opened = Number(item.openCount) === 1 ? 'Opened once' : `Opened ${item.openCount} times`;
+  detail.textContent = `${opened} · ${formatLibraryDate(item.lastOpenedAt)}`;
+  open.append(type, title, detail);
+
+  const save = document.createElement('button');
+  save.type = 'button';
+  save.className = `library-save${item.isSaved ? ' is-saved' : ''}`;
+  save.dataset.toggleSaved = item.id;
+  save.setAttribute('aria-label', item.isSaved ? 'Remove from saved' : 'Save reading');
+  save.title = item.isSaved ? 'Remove from saved' : 'Save reading';
+  save.textContent = item.isSaved ? '★' : '☆';
+
+  row.append(open, save);
+  return row;
+}
+
+function makeLibraryNoteRow(note) {
+  const row = document.createElement('li');
+  row.className = 'library-row library-note-row';
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'library-note-button';
+  open.dataset.openNote = note.id;
+  const type = document.createElement('span');
+  type.className = 'library-type';
+  type.textContent = `${sourceTypeLabel(note.sourceType)} · ${formatLibraryDate(note.createdAt)}`;
+  const quote = document.createElement('blockquote');
+  quote.textContent = note.quote;
+  const body = document.createElement('p');
+  body.className = 'library-note-body';
+  body.textContent = note.body;
+  const source = document.createElement('span');
+  source.className = 'library-entry-detail';
+  source.textContent = note.sourceTitle || 'Untitled reading';
+  open.append(type, quote, body, source);
+
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'library-remove-note';
+  remove.dataset.deleteNote = note.id;
+  remove.setAttribute('aria-label', 'Delete note');
+  remove.title = 'Delete note';
+  remove.textContent = '×';
+  row.append(open, remove);
+  return row;
+}
+
+function setLibraryEmpty(section) {
+  const copy = {
+    history: ['Your story starts with a first read.', 'Open an article, PDF, or text and it will appear here.'],
+    saved: ['Keep a good one close.', 'Save a reading with the bookmark button to find it here.'],
+    notes: ['No notes just yet.', 'Select a passage or use its note button to save a thought.'],
+  }[section];
+  els.libraryEmptyTitle.textContent = copy[0];
+  els.libraryEmptyHint.textContent = copy[1];
+}
+
+async function loadLibrary(section = activeLibrarySection) {
+  setLibrarySection(section);
+  els.libraryList.replaceChildren();
+  els.libraryEmpty.hidden = true;
+  const result = await api.listLibrary(section);
+  if (!result.ok) {
+    showError(`Could not open your library: ${result.error}`);
+    return;
+  }
+  const entries = result.entries || [];
+  els.libraryList.replaceChildren(...entries.map((entry) => section === 'notes' ? makeLibraryNoteRow(entry) : makeLibrarySourceRow(entry)));
+  if (!entries.length) {
+    setLibraryEmpty(section);
+    els.libraryEmpty.hidden = false;
+  }
+}
+
+async function openLibraryItem(id, note = null) {
+  const result = await api.openLibraryItem(id);
+  if (!result.ok) { showError(result.error); return; }
+  els.libraryDialog.close();
+  renderArticle(result.article, result.pdfData, result.libraryItemId, result.isSaved, result.fileUnavailable);
+  if (note) showNoteAtAnchor(note);
+}
+
+els.libraryOpen.addEventListener('click', () => {
+  els.libraryDialog.showModal();
+  loadLibrary('history');
+});
+els.libraryClose.addEventListener('click', () => els.libraryDialog.close());
+document.querySelectorAll('[data-library-tab]').forEach((tab) => {
+  tab.addEventListener('click', () => loadLibrary(tab.dataset.libraryTab));
+});
+els.libraryList.addEventListener('click', async (event) => {
+  const save = event.target.closest('[data-toggle-saved]');
+  if (save) {
+    const result = await api.toggleSavedItem(save.dataset.toggleSaved);
+    if (!result.ok) { showError(result.error); return; }
+    if (state.libraryItemId === save.dataset.toggleSaved) {
+      state.isSaved = result.isSaved;
+      els.bookmarkToggle.textContent = state.isSaved ? 'Saved' : 'Save';
+      els.bookmarkToggle.setAttribute('aria-pressed', String(state.isSaved));
+      els.bookmarkToggle.classList.toggle('is-saved', state.isSaved);
+    }
+    loadLibrary(activeLibrarySection);
+    return;
+  }
+  const remove = event.target.closest('[data-delete-note]');
+  if (remove) {
+    const result = await api.deleteNote(remove.dataset.deleteNote);
+    if (!result.ok) { showError(result.error); return; }
+    loadLibrary(activeLibrarySection);
+    return;
+  }
+  const openNote = event.target.closest('[data-open-note]');
+  if (openNote) {
+    const noteId = openNote.dataset.openNote;
+    const listing = await api.listLibrary('notes');
+    const note = listing.entries?.find((entry) => entry.id === noteId);
+    if (!listing.ok || !note) { showError(listing.error || 'That note could not be found.'); return; }
+    await openLibraryItem(note.itemId, note);
+    return;
+  }
+  const open = event.target.closest('[data-open-item]');
+  if (open) await openLibraryItem(open.dataset.openItem);
+});
+
+els.bookmarkToggle.addEventListener('click', async () => {
+  if (!state.libraryItemId) return;
+  const result = await api.toggleSavedItem(state.libraryItemId);
+  if (!result.ok) { showError(result.error); return; }
+  state.isSaved = result.isSaved;
+  els.bookmarkToggle.textContent = state.isSaved ? 'Saved' : 'Save';
+  els.bookmarkToggle.setAttribute('aria-pressed', String(state.isSaved));
+  els.bookmarkToggle.classList.toggle('is-saved', state.isSaved);
+});
 
 // ---------------------------------------------------------------- highlighting
 function moveMarker() {
@@ -272,7 +742,7 @@ function request(index) {
 
   const entry = { url: null, promise: null };
   entry.promise = api
-    .synth({ text: state.units[index].text, engine: state.engine, voice: state.voice })
+    .synth({ text: state.units[index].text, voice: state.voice })
     .then((res) => {
       if (!res.ok) throw Object.assign(new Error(res.error), { cancelled: res.cancelled });
       const url = URL.createObjectURL(new Blob([res.audio], { type: 'audio/wav' }));
@@ -441,33 +911,79 @@ els.article.addEventListener('click', (event) => {
 });
 
 // ---------------------------------------------------------------- settings
-els.speed.value = String(state.speed);
-els.speed.addEventListener('change', () => {
-  state.speed = Number(els.speed.value);
-  store.set('speed', state.speed);
-  audio.playbackRate = state.speed;
-  updateProgress();
+function applyReadingSettings() {
+  const root = document.documentElement;
+  root.dataset.theme = readingSettings.theme === 'dark' || (readingSettings.theme === 'system' && systemDarkMode.matches) ? 'dark' : 'light';
+  root.dataset.font = readingSettings.font;
+  root.style.setProperty('--reading-size', `${readingSettings.fontSize}px`);
+  root.style.setProperty('--reading-width', `${readingSettings.lineWidth}ch`);
+  root.style.setProperty('--reading-leading', String(readingSettings.lineSpacing));
+
+  els.colorTheme.value = readingSettings.theme;
+  els.fontStyle.value = readingSettings.font;
+  els.fontSize.value = String(readingSettings.fontSize);
+  els.fontSizeValue.textContent = `${readingSettings.fontSize} px`;
+  els.lineWidth.value = String(readingSettings.lineWidth);
+  els.lineWidthValue.textContent = `${readingSettings.lineWidth} chars`;
+  els.lineSpacing.value = String(readingSettings.lineSpacing);
+  els.lineSpacingValue.textContent = `${readingSettings.lineSpacing.toFixed(1)}×`;
+}
+
+function updateReadingSetting(key, value) {
+  readingSettings[key] = value;
+  applyReadingSettings();
+  store.set(`reading.${key}`, value);
+}
+
+els.colorTheme.addEventListener('change', () => updateReadingSetting('theme', els.colorTheme.value));
+els.fontStyle.addEventListener('change', () => updateReadingSetting('font', els.fontStyle.value));
+els.fontSize.addEventListener('input', () => {
+  readingSettings.fontSize = Number(els.fontSize.value);
+  applyReadingSettings();
+});
+els.fontSize.addEventListener('change', () => store.set('reading.fontSize', readingSettings.fontSize));
+els.lineWidth.addEventListener('input', () => {
+  readingSettings.lineWidth = Number(els.lineWidth.value);
+  applyReadingSettings();
+});
+els.lineWidth.addEventListener('change', () => store.set('reading.lineWidth', readingSettings.lineWidth));
+els.lineSpacing.addEventListener('input', () => {
+  readingSettings.lineSpacing = Number(els.lineSpacing.value);
+  applyReadingSettings();
+});
+els.lineSpacing.addEventListener('change', () => store.set('reading.lineSpacing', readingSettings.lineSpacing));
+applyReadingSettings();
+systemDarkMode.addEventListener('change', () => {
+  if (readingSettings.theme === 'system') applyReadingSettings();
 });
 
+function updateSpeed(value, persist = true) {
+  state.speed = Math.round(clampSetting(value, 0.6, 2.4, 1) * 10) / 10;
+  els.speed.value = String(state.speed);
+  const label = `${state.speed.toFixed(1)}×`;
+  els.speedValue.textContent = label;
+  els.speed.setAttribute('aria-valuetext', `${state.speed.toFixed(1)} times speed`);
+  audio.playbackRate = state.speed;
+  if (persist) store.set('speed', state.speed);
+  updateProgress();
+}
+
+els.speed.addEventListener('input', () => updateSpeed(els.speed.value));
+updateSpeed(state.speed, false);
+
 function applyVoiceChange() {
-  store.set('engine', state.engine);
-  store.set(`voice.${state.engine}`, state.voice);
+  store.set('voice.kokoro', state.voice);
   if (state.units.length) seekToUnit(state.pos); // re-reads the current chunk in the new voice
 }
 
 function fillVoices() {
-  const list = voicesInfo.voices[state.engine];
+  const list = voicesInfo.voices.kokoro;
   els.voice.replaceChildren(...list.map((v) => new Option(`${v.name}, ${v.desc}`, v.name)));
-  const saved = store.get(`voice.${state.engine}`, voicesInfo.defaults[state.engine]);
-  els.voice.value = list.some((v) => v.name === saved) ? saved : voicesInfo.defaults[state.engine];
+  const saved = store.get('voice.kokoro', voicesInfo.defaults.kokoro);
+  els.voice.value = list.some((v) => v.name === saved) ? saved : voicesInfo.defaults.kokoro;
   state.voice = els.voice.value;
 }
 
-els.engine.addEventListener('change', () => {
-  state.engine = els.engine.value;
-  fillVoices();
-  applyVoiceChange();
-});
 els.voice.addEventListener('change', () => {
   state.voice = els.voice.value;
   applyVoiceChange();
@@ -478,35 +994,30 @@ api.setAllowDownload(els.allowDownload.checked);
 els.allowDownload.addEventListener('change', () => {
   store.set('allowDownload', els.allowDownload.checked);
   api.setAllowDownload(els.allowDownload.checked);
-  if (state.units.length) seekToUnit(state.pos); // the worker restarted; queue the chunk again
+  if (state.units.length) seekToUnit(state.pos); // retry the current chunk with the updated download setting
 });
 
 async function initVoices() {
   const res = await api.voices();
   if (!res.ok) {
-    showError(
-      res.error,
-      'Installed copies include the speech engine and do not need system Python. Reinstall the app if its bundled engine is missing. For development builds, see the Python setup instructions in the README.',
-    );
+    showError(res.error, 'Open Voice settings and allow the voice model download the first time you use voxo.');
     return;
   }
   voicesInfo = res;
-  els.engine.replaceChildren(...res.engines.map((name) => new Option(name, name)));
-  const saved = store.get('engine', 'kokoro');
-  state.engine = res.engines.includes(saved) ? saved : 'kokoro';
-  els.engine.value = state.engine;
   fillVoices();
 }
 
 document.addEventListener('click', (event) => {
-  if (els.options.open && !els.options.contains(event.target)) els.options.open = false;
+  document.querySelectorAll('.options[open]').forEach((menu) => {
+    if (!menu.contains(event.target)) menu.open = false;
+  });
 });
 
 // ---------------------------------------------------------------- loading pages
 async function openUrl(input) {
   hideError();
   els.go.disabled = true;
-  renderStatus('Fetching page…');
+  renderStatus('Loading article…');
   const res = await api.loadUrl(input);
   els.go.disabled = false;
   if (!res.ok) {
@@ -515,7 +1026,8 @@ async function openUrl(input) {
     return;
   }
   els.url.value = res.article.url;
-  renderArticle(res.article);
+  renderArticle(res.article, null, res.libraryItemId, res.isSaved);
+  if (res.libraryError) showError(`Your article opened, but history could not be saved: ${res.libraryError}`);
 }
 
 els.form.addEventListener('submit', (event) => {
@@ -535,7 +1047,8 @@ els.textForm.addEventListener('submit', async (event) => {
   els.textSubmit.disabled = false;
   if (!res.ok) { showError(res.error); return; }
   els.textDialog.close();
-  renderArticle(res.article);
+  renderArticle(res.article, null, res.libraryItemId, res.isSaved);
+  if (res.libraryError) showError(`Your text opened, but history could not be saved: ${res.libraryError}`);
 });
 els.pdfOpen.addEventListener('click', async () => {
   hideError();
@@ -545,13 +1058,8 @@ els.pdfOpen.addEventListener('click', async () => {
   els.pdfOpen.disabled = false;
   if (res.cancelled) { renderStatus(); return; }
   if (!res.ok) { showError(res.error); setPhase(state.units.length ? 'paused' : 'empty'); return; }
-  try {
-    res.article.pdfPreviews = await renderPdfPreviews(res.pdfData, res.article.pdfPageCount);
-  } catch (err) {
-    console.error('PDF preview rendering failed', err);
-    res.article.pdfPreviews = [];
-  }
-  renderArticle(res.article);
+  renderArticle(res.article, res.pdfData, res.libraryItemId, res.isSaved);
+  if (res.libraryError) showError(`Your PDF opened, but history could not be saved: ${res.libraryError}`);
 });
 
 api.onStatus((message) => renderStatus(message));

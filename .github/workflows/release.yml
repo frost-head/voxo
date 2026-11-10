@@ -18,15 +18,12 @@ jobs:
         include:
           - runner: macos-26
             target: mac-arm64
-            binary: voxo-tts
             artifact: "dist/*.dmg"
           - runner: macos-26-intel
             target: mac-x64
-            binary: voxo-tts
             artifact: "dist/*.dmg"
           - runner: windows-2025
             target: win-x64
-            binary: voxo-tts.exe
             artifact: "dist/*.exe"
     steps:
       - uses: actions/checkout@v4
@@ -34,21 +31,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
       - run: npm ci
-      - name: Install bundled speech runtime dependencies
-        run: python -m pip install -r packaging/requirements-tts.txt
-      - name: Freeze Python speech runtime
-        run: npm run build:tts
-      - name: Check frozen speech runtime
-        shell: bash
-        run: |
-          build/tts/voxo-tts/${{ matrix.binary }} --voices-json
-          mkdir -p build/tts-data/voices
-          cp tts/voices/en_US-amy-medium.onnx tts/voices/en_US-amy-medium.onnx.json build/tts-data/voices/
-          VOXO_TTS_DATA="$PWD/build/tts-data" build/tts/voxo-tts/${{ matrix.binary }} "Voxo release smoke check." --engine piper --output build/tts-smoke.wav
       - name: Build installer
         env:
           CSC_LINK: ${{ runner.os == 'Windows' && secrets.WIN_CSC_LINK || secrets.MAC_CSC_LINK }}

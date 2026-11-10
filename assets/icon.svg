@@ -1,19 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="bg" x1="112" y1="80" x2="900" y2="944" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#28266f"/>
-      <stop offset="1" stop-color="#11162c"/>
+    <linearGradient id="background" x1="120" y1="72" x2="892" y2="952" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#254553"/>
+      <stop offset=".52" stop-color="#292e50"/>
+      <stop offset="1" stop-color="#211c37"/>
     </linearGradient>
-    <linearGradient id="wave" x1="300" y1="368" x2="740" y2="656" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#79f2df"/>
-      <stop offset=".52" stop-color="#c1a9ff"/>
-      <stop offset="1" stop-color="#ff9cbd"/>
+    <linearGradient id="leftPage" x1="230" y1="330" x2="508" y2="690" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff8eb"/>
+      <stop offset="1" stop-color="#e8e8e5"/>
     </linearGradient>
+    <linearGradient id="rightPage" x1="520" y1="360" x2="804" y2="680" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f0edfc"/>
+      <stop offset="1" stop-color="#dce8e8"/>
+    </linearGradient>
+    <linearGradient id="sound" x1="377" y1="470" x2="647" y2="620" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#e98263"/>
+      <stop offset=".5" stop-color="#d27fb2"/>
+      <stop offset="1" stop-color="#68cbb9"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="matrix(0 440 -490 0 512 220)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff" stop-opacity=".13"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
   </defs>
-  <rect x="32" y="32" width="960" height="960" rx="224" fill="url(#bg)"/>
-  <path d="M256 512c0-24 18-44 40-44s40 20 40 44v0c0 24-18 44-40 44s-40-20-40-44Z" fill="url(#wave)" opacity=".85"/>
-  <rect x="368" y="344" width="80" height="336" rx="40" fill="url(#wave)"/>
-  <rect x="472" y="272" width="80" height="480" rx="40" fill="url(#wave)"/>
-  <rect x="576" y="344" width="80" height="336" rx="40" fill="url(#wave)"/>
-  <rect x="680" y="424" width="80" height="176" rx="40" fill="url(#wave)" opacity=".88"/>
+  <rect x="32" y="32" width="960" height="960" rx="224" fill="url(#background)"/>
+  <rect x="32" y="32" width="960" height="960" rx="224" fill="url(#glow)"/>
+  <path d="M218 352c103-38 198-26 294 35v311c-92-58-190-72-294-34V352Z" fill="url(#leftPage)"/>
+  <path d="M512 387c96-61 191-73 294-35v312c-104-38-202-24-294 34V387Z" fill="url(#rightPage)"/>
+  <path d="M512 388v310" fill="none" stroke="#b8c6c8" stroke-linecap="round" stroke-width="13"/>
+  <path d="M258 402c70-22 143-18 212 10M258 454c54-16 106-17 157-3M766 402c-70-22-143-18-212 10M766 454c-54-16-106-17-157-3" fill="none" stroke="#bbc5c8" stroke-linecap="round" stroke-opacity=".64" stroke-width="12"/>
+  <rect x="376" y="497" width="64" height="140" rx="32" fill="url(#sound)"/>
+  <rect x="480" y="438" width="64" height="256" rx="32" fill="url(#sound)"/>
+  <rect x="584" y="497" width="64" height="140" rx="32" fill="url(#sound)"/>
 </svg>

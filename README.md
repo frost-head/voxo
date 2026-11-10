@@ -1,93 +1,53 @@
 # voxo
 
-voxo is an Electron app that reads web pages, pasted text, and text-based PDFs
-aloud with local text-to-speech (Piper, Kokoro or Bark through `tts.py`).
+voxo is a desktop reader for web pages, pasted text, and text-based PDFs. Speech
+is generated locally with Kokoro using the JavaScript runtime; the app does not
+require Python.
 
-- **Reader mode:** Mozilla Readability, the same library behind Firefox reader mode.
-  Menus, ads, comments and footers are dropped. Pages that build their text with
-  JavaScript are loaded in a hidden window as a fallback.
-- **Follow along:** the paragraph being read is tinted and marked in the margin.
-  Click any paragraph to start from there.
-- **Local speech:** `tts.py` runs as one long-lived worker, so the voice model
-  loads once. The next paragraphs are prepared while the current one plays.
-- **Custom text and PDFs:** paste text into the app or open a PDF from disk. PDF
-  text and page previews are extracted locally; scanned PDFs can be viewed but
-  need OCR before their text can be read aloud.
+- **Reader mode:** Mozilla Readability removes page furniture. JavaScript-built
+  pages are loaded in a hidden window when needed.
+- **Follow along:** the current paragraph is highlighted. Click a paragraph to
+  start reading there.
+- **Custom text and PDFs:** paste text or open a PDF. Text extraction and PDF
+  previews run locally; scanned PDFs need OCR before they can be read aloud.
+- **Local speech:** Kokoro runs through Transformers.js and ONNX Runtime on the
+  CPU. The model is downloaded on first use and cached on the computer.
 
-## Set up
+## Run from source
 
-You need Node 20 or newer and Python 3.10 or newer.
-
-```bash
-cd voxo
-npm install
-
-# Python side (inside the tts folder, so the app finds it automatically)
-cd tts
-python3 -m venv venv
-source venv/bin/activate
-pip install --upgrade pip
-pip install numpy kokoro-onnx piper-tts      # add: torch "transformers<5"  for Bark
-deactivate
-cd ..
-```
-
-Run it:
+Requirements: Node.js 22 or newer.
 
 ```bash
-npm start
-npm start -- https://example.com/some-article    # open a page straight away
-```
-
-### First run: downloading voices
-
-Nothing is downloaded unless you allow it. Open **Voice** in the app, turn on
-**Allow model downloads**, and press play. The voice or model is fetched once
-(Kokoro is about 300 MB). Turn the option off again afterwards if you like.
-
-### Reusing your existing setup
-
-If you already have a working folder with a venv, `voices/` and `models/`, point
-the app at it instead of setting up again. Replace that folder's `tts.py` with
-the one in `tts/tts.py` (it adds the worker mode), then:
-
-```bash
-TTS_SCRIPT=~/Projects/Audio/tts.py \
-TTS_PYTHON=~/Projects/Audio/venv/bin/python \
+npm ci
 npm start
 ```
 
-## Using it
+The Kokoro model is not downloaded until you allow its download in **Voice**
+settings and start playback. Once cached, voxo can use it without an internet
+connection. No Python installation or virtual environment is used.
+
+## Use voxo
 
 | Action | How |
 |---|---|
-| Open a page | Paste an address and press Enter (Cmd or Ctrl + L focuses the box) |
-| Read custom text | Select **Paste text**, enter or paste text, then select **Read text** |
-| Read a PDF | Select **Open PDF** and choose a file |
+| Open an article | Paste a link and press Enter (Cmd/Ctrl+L focuses the link field) |
+| Add your own text | Select **Add text**, enter text, then select **Open in reader** |
+| Open a PDF | Select **Open PDF** and choose a file |
 | Play or pause | Space, or the round button |
-| Previous or next paragraph | Left and right arrow keys |
-| Start from a paragraph | Click it |
-| Change speed | The speed menu in the player (changes apply immediately) |
-| Change engine or voice | **Voice** button at the top right |
+| Move between paragraphs | Left and right arrow keys |
+| Start at a paragraph | Click it |
+| Change speed | Move the speed slider in the player |
+| Tune the page | Use **Reading** to change theme, font, size, width, and spacing |
+| Change voice | Use the **Voice** menu |
 
-Images, code blocks, and image captions are shown but not read. Footnote markers
-like `[1]` and long web addresses are dropped from the spoken text.
+Images and code blocks are shown but not read. Footnote markers and long web
+addresses are omitted from spoken text.
 
-## Build and ship
+## Build installers
 
-The installer includes the Electron app and a frozen `voxo-tts` executable with
-the Python runtime and Kokoro, Piper, and Bark speech libraries. Kokoro is the
-default engine and runs through ONNX on CPU on every platform. Its model files
-download on first use after the user enables **Allow model downloads** in
-**Voice**. The app stores downloaded models in its writable user data
-directory. Piper's default voice is included. End users do not need Python
-installed; Python is needed only on the build machine to create the frozen
-speech executable.
-
-These commands create installable release files: a drag-to-install DMG for
-macOS and a Windows NSIS setup `.exe`. Build on the target OS and architecture.
-PyInstaller cannot cross-compile the speech executable, so build each target on
-its matching machine:
+Build on the target operating system and architecture. Electron’s native ONNX
+Runtime package is included in the app, and end users do not need Node.js or
+Python installed.
 
 | Target | Build machine | Command | Output |
 |---|---|---|---|
@@ -95,90 +55,31 @@ its matching machine:
 | Intel Mac | Intel Mac | `npm run dist:mac:x64` | `dist/voxo-<version>-mac-x64.dmg` |
 | Windows 10/11 x64 | Windows x64 | `npm run dist:win:x64` | `dist/voxo-<version>-win-x64.exe` |
 
-Each build needs Node 22 and Python 3.12. In a clean checkout, install the
-packaging dependencies once, then run the command for that machine:
+On each build machine:
 
 ```bash
 npm ci
-python3.12 -m venv .venv-build
-source .venv-build/bin/activate
-python -m pip install -r packaging/requirements-tts.txt
 npm run dist:mac:arm64
 ```
 
-Use `npm run dist:mac:x64` on an Intel Mac, or `npm run dist:win:x64` on
-Windows x64. These `dist:*` commands build the Python speech runtime first and
-then create the installer. You can also run just `npm run package:mac:arm64`,
-`npm run package:mac:x64`, or `npm run package:win:x64` when
-`build/tts/voxo-tts/voxo-tts` (or `build/tts/voxo-tts/voxo-tts.exe` on Windows)
-has already been built.
+Use the matching `dist:*` command from the table for Windows or Intel Macs.
+There is no Python build step. For automatic releases, push a version tag such
+as `v0.1.0`; GitHub Actions builds the three platform installers.
 
-On Windows, create and activate the venv with `py -3.12 -m venv .venv-build`
-and `.venv-build\\Scripts\\Activate.ps1`, then run the same pip and npm
-commands with `npm run dist:win:x64`. Build Intel Mac installers on an Intel
-Mac; Windows and macOS binaries must be frozen on their native platforms.
+Installers are unsigned unless signing credentials are configured. For signed
+releases, configure the macOS Developer ID/notarization secrets or the Windows
+Authenticode secrets in GitHub Actions.
 
-For automatic builds, push a version tag such as `v0.1.0`. The GitHub Actions
-workflow builds Apple Silicon Mac, Intel Mac, and Windows x64 installers,
-smoke-checks the frozen Piper worker, and publishes the files on a GitHub
-Release. A manually started workflow run builds downloadable artifacts but
-does not publish a release.
+## Project layout
 
-Without signing secrets, the generated installers are unsigned. For signed
-releases, add `MAC_CSC_LINK` and `MAC_CSC_KEY_PASSWORD` for a Developer ID
-Application certificate, plus `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and
-`APPLE_TEAM_ID` for notarization. Add `WIN_CSC_LINK` and
-`WIN_CSC_KEY_PASSWORD` for an Authenticode certificate. Store these as GitHub
-Actions secrets before publishing broadly.
-
-The Intel Mac build pins PyTorch 2.2.2 and ONNX Runtime 1.23.2 because those
-are the final upstream releases with Intel macOS wheels. Kokoro ONNX runs on
-CPU and is used on Apple Silicon, Intel Mac, and Windows.
-
-## Tests
-
-```bash
-npm test
-```
-
-Covers article extraction, the fetch-then-render fallback and the speech worker
-protocol (with a fake engine, so no models are needed).
-
-## Notes and limits
-
-- **Tested here:** the extraction, the worker protocol, and the whole app running
-  in a real Electron window on Linux, with a fake speech engine standing in for
-  the models. It has not been run on macOS or with the real Piper, Kokoro or
-  Bark engines.
-- **Bark is slow.** If it can't keep ahead of playback you will see "Preparing
-  the voice…" between paragraphs. Piper and Kokoro should keep up.
-- **Text only.** Images are not shown. Pages behind a login or paywall can't be
-  read, because the app doesn't sign in.
-- **Privacy.** Page and visible image fetches are the network use; image requests
-  omit the page referrer. Speech is generated on your computer. For
-  script-built pages the app runs the page's own JavaScript in a hidden,
-  sandboxed window with audio muted.
-- **Development vs. release.** `npm start` runs the Electron development shell.
-  Use the release commands above to produce a standalone app with the bundled
-  Python speech worker. Model downloads remain optional.
-- **Environment variables:** `TTS_PYTHON` (Python to use) and `TTS_SCRIPT` (path
-  to `tts.py`).
-
-## Layout
-
-```
-main.js              window, page fetching, speech worker, IPC
-preload.js           the small, safe API the page can call
-lib/extract.js       HTML to reader blocks and speech chunks
-lib/loader.js        fetch, then render if the page is an empty shell
-lib/tts-worker.js    manages `tts.py --serve`
-renderer/            reader view and player
-tts/tts.py           speech engines (also usable on its own from the terminal)
-test/                tests and a fake speech engine
-assets/icon.svg      editable voxo icon artwork
-assets/icon.png      app and Linux icon
-assets/icon.icns     macOS app icon
-assets/icon.ico      Windows app icon
-packaging/           frozen Python runtime spec and dependencies
-.github/workflows/   native macOS and Windows release builds
+```text
+main.js                    Electron main process and IPC
+preload.js                 Renderer API bridge
+lib/tts-worker.js           Kokoro utility process and request queue
+lib/tts-engine-worker.js    JavaScript Kokoro inference
+lib/extract.js              HTML article extraction and speech chunking
+lib/loader.js               Web fetching and render fallback
+renderer/                   Reader UI and playback
+assets/                     App icons
+test/                       Text extraction and page loading tests
 ```

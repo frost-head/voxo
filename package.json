@@ -9,17 +9,18 @@
   "scripts": {
     "start": "electron .",
     "test": "node test/run.js",
-    "build:tts": "python -m PyInstaller --noconfirm --clean --distpath build/tts --workpath build/pyinstaller packaging/voxo-tts.spec",
     "package:mac:arm64": "electron-builder --mac dmg --arm64",
     "package:mac:x64": "electron-builder --mac dmg --x64",
     "package:win:x64": "electron-builder --win nsis --x64",
-    "dist:mac:arm64": "npm run build:tts && npm run package:mac:arm64",
-    "dist:mac:x64": "npm run build:tts && npm run package:mac:x64",
-    "dist:win:x64": "npm run build:tts && npm run package:win:x64"
+    "dist:mac:arm64": "npm run package:mac:arm64",
+    "dist:mac:x64": "npm run package:mac:x64",
+    "dist:win:x64": "npm run package:win:x64"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
+    "better-sqlite3": "^13.0.3",
     "jsdom": "^31.0.0",
+    "kokoro-js": "^1.2.1",
     "pdfjs-dist": "^4.10.38"
   },
   "devDependencies": {
@@ -30,13 +31,8 @@
     "appId": "com.voxo.reader",
     "productName": "voxo",
     "artifactName": "voxo-${version}-${os}-${arch}.${ext}",
-    "afterPack": "packaging/after-pack.cjs",
     "files": [
       "**/*",
-      "!tts",
-      "!tts/**",
-      "!packaging",
-      "!packaging/**",
       "!.github",
       "!.github/**",
       "!test",
@@ -46,19 +42,8 @@
       "!dist",
       "!dist/**"
     ],
-    "extraResources": [
-      {
-        "from": "build/tts/voxo-tts",
-        "to": "tts/voxo-tts"
-      },
-      {
-        "from": "tts/voices",
-        "to": "tts-data/voices",
-        "filter": [
-          "en_US-amy-medium.onnx",
-          "en_US-amy-medium.onnx.json"
-        ]
-      }
+    "asarUnpack": [
+      "node_modules/onnxruntime-node/bin/**"
     ],
     "mac": {
       "icon": "assets/icon.icns",
