@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, net, session, dialog, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, net, session, dialog, protocol, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { loadArticle } = require('./lib/loader');
@@ -449,8 +449,21 @@ function createWindow() {
     app.dock.setIcon(path.join(__dirname, 'assets', 'icon.png'));
   }
   mainWindow.setMenuBarVisibility(false);
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  mainWindow.webContents.on('will-navigate', (event) => event.preventDefault());
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    event.preventDefault();
+    if (/^https?:/i.test(url)) {
+      shell.openExternal(url);
+    }
+  });
+
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
   const initialUrl = urlFromArgs(process.argv);

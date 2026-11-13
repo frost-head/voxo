@@ -1452,10 +1452,16 @@ line-height: 1.65;
 #body blockquote p { margin: 0 0 0.75rem; }
 #body blockquote p:last-child { margin-bottom: 0; }
 
-#body .inline-link {
+#body .inline-link,
+#body a.inline-link {
 text-decoration: underline;
 text-decoration-color: color-mix(in srgb, var(--accent) 55%, transparent);
 text-underline-offset: 0.16em;
+color: inherit;
+}
+
+#body a.inline-link:hover {
+color: var(--accent);
 }
 
 #body mark {
@@ -1677,12 +1683,22 @@ color: var(--ink);
 }
 
 .note-composer {
-display: grid;
-gap: 0.6rem;
-padding: 0.95rem;
+display: flex;
+flex-direction: column;
 border: 1px solid var(--line-strong);
-border-radius: 14px;
+border-radius: 12px;
+background: var(--reader);
+box-shadow: var(--shadow-sm);
+overflow: hidden;
+}
+
+.note-composer-header {
+display: flex;
+align-items: center;
+justify-content: space-between;
+padding: 0.55rem 0.75rem;
 background: var(--panel);
+border-bottom: 1px solid var(--line);
 }
 
 .note-anchor-bar {
@@ -1737,36 +1753,73 @@ cursor: pointer;
 display: none;
 }
 
+.anchor-reset-icon {
+display: grid;
+place-items: center;
+width: 1.6rem;
+height: 1.6rem;
+padding: 0;
+border: 0;
+border-radius: 6px;
+background: transparent;
+color: var(--ink-dim);
+cursor: pointer;
+transition: background-color 140ms ease, color 140ms ease;
+}
+
+.anchor-reset-icon:hover {
+background: var(--line);
+color: var(--ink);
+}
+
+.anchor-reset-icon svg {
+width: 0.9rem;
+height: 0.9rem;
+}
+
+.anchor-reset-icon[hidden] {
+display: none;
+}
+
+.note-composer-quote-wrap {
+padding: 0.6rem 0.75rem 0;
+}
+
 .note-composer-quote {
 margin: 0;
-padding: 0.45rem 0.65rem;
+padding: 0.35rem 0.55rem;
 max-height: 4.4rem;
 overflow-y: auto;
 border-left: 2px solid var(--accent);
-border-radius: 0 8px 8px 0;
-background: var(--paper);
+border-radius: 0 6px 6px 0;
+background: var(--surface-subtle);
 color: var(--ink-secondary);
 font: 0.8rem/1.45 var(--serif);
 }
 
-.note-composer textarea {
-width: 100%;
-min-height: 4.5rem;
-max-height: 11rem;
-resize: vertical;
-padding: 0.6rem 0.7rem;
-border: 1px solid var(--line-strong);
-border-radius: 9px;
-background: var(--paper);
-color: var(--ink);
-font: 0.84rem/1.5 var(--sans);
-transition: border-color 140ms ease, box-shadow 140ms ease;
+.note-composer-body {
+padding: 0.5rem 0.75rem;
 }
 
-.note-composer textarea:focus {
-border-color: color-mix(in srgb, var(--accent) 60%, var(--line-strong));
-box-shadow: 0 0 0 3px var(--tint);
+.note-composer-body textarea {
+width: 100%;
+min-height: 4rem;
+max-height: 12rem;
+resize: vertical;
+padding: 0;
+border: 0;
+background: transparent;
+color: var(--ink);
+font: 0.86rem/1.5 var(--sans);
+}
+
+.note-composer-body textarea:focus {
 outline: none;
+box-shadow: none;
+}
+
+.note-composer-body textarea::placeholder {
+color: var(--ink-dim);
 }
 
 .note-composer-footer {
@@ -1774,6 +1827,9 @@ display: flex;
 align-items: center;
 justify-content: space-between;
 gap: 0.5rem;
+padding: 0.5rem 0.75rem;
+background: var(--panel);
+border-top: 1px solid var(--line);
 }
 
 .note-shortcut-hint {

@@ -133,7 +133,7 @@
 
   <div id="workspace" class="workspace">
     <main id="scroller" class="scroller">
-      
+
       <!-- Home Screen View -->
       <section id="empty" class="empty">
         <div class="whisper-hero">
@@ -192,7 +192,7 @@
             <span id="library-close-text">Back to Home</span>
           </button>
         </header>
-        
+
         <div class="library-search-container">
           <div class="library-search-bar">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m21 21-4.35-4.35" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -266,23 +266,29 @@
       </header>
 
       <form id="note-form" class="note-composer">
-        <div class="note-anchor-bar">
+        <header class="note-composer-header">
           <div class="note-anchor-status">
             <span id="note-anchor-dot" class="anchor-dot"></span>
             <span id="note-anchor-label" class="anchor-label">Listening context</span>
           </div>
-          <button id="note-anchor-reset" class="anchor-reset" type="button" hidden title="Return to live playback tracking">Follow voice</button>
+          <button id="note-anchor-reset" class="anchor-reset-icon" type="button" hidden title="Return to live playback tracking">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </header>
+
+        <div class="note-composer-quote-wrap">
+          <blockquote id="note-quote" class="note-composer-quote"></blockquote>
         </div>
 
-        <blockquote id="note-quote" class="note-composer-quote"></blockquote>
+        <div class="note-composer-body">
+          <label class="sr-only" for="note-body">Write a note</label>
+          <textarea id="note-body" rows="3" maxlength="20000" placeholder="Jot a thought while listening… (Press N to focus)" required></textarea>
+        </div>
 
-        <label class="sr-only" for="note-body">Write a note</label>
-        <textarea id="note-body" rows="3" maxlength="20000" placeholder="Jot a thought while listening… (Press N to focus, ⌘/Ctrl+Enter to save)" required></textarea>
-
-        <div class="note-composer-footer">
+        <footer class="note-composer-footer">
           <span class="note-shortcut-hint">⌘/Ctrl + Enter to save</span>
-          <button id="note-submit" type="submit">Add Note</button>
-        </div>
+          <button id="note-submit" type="submit">Save Note</button>
+        </footer>
       </form>
 
       <div class="notes-stream-header">

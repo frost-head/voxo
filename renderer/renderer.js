@@ -17,9 +17,9 @@ const els = {
   cardUrl: $('#card-url'), cardPdf: $('#card-pdf'), cardText: $('#card-text'),
   recentSection: $('#recent-section'), recentList: $('#recent-list'), recentViewAll: $('#recent-view-all'),
   textDialog: $('#text-dialog'), textForm: $('#text-form'), customText: $('#custom-text'), textCancel: $('#text-cancel'), textCloseX: $('#text-close-x'), textSubmit: $('#text-submit'),
-  
+
   libraryView: $('#library-view'), libraryClose: $('#library-close'), libraryCloseText: $('#library-close-text'), libraryClearHistory: $('#library-clear-history'), libraryList: $('#library-list'), libraryEmpty: $('#library-empty'), libraryEmptyTitle: $('#library-empty-title'), libraryEmptyHint: $('#library-empty-hint'), librarySearch: $('#library-search'),
-  
+
   options: $('#options'), voice: $('#voice'), allowDownload: $('#allow-download'), log: $('#log'),
   colorTheme: $('#color-theme'), fontStyle: $('#font-style'), fontSize: $('#font-size'), fontSizeValue: $('#font-size-value'),
   lineWidth: $('#line-width'), lineWidthValue: $('#line-width-value'), lineSpacing: $('#line-spacing'), lineSpacingValue: $('#line-spacing-value'),
@@ -40,7 +40,7 @@ const readout = els.status.parentElement;
 const WORDS_PER_MINUTE = 150;
 const AHEAD = 2;
 const PDF_PREVIEW_BATCH_SIZE = 8;
-const INLINE_TAGS = new Set(['strong', 'em', 'mark', 'code', 'kbd', 'sup', 'sub', 'del', 'ins', 'small', 'abbr', 'p', 'br', 'span']);
+const INLINE_TAGS = new Set(['strong', 'em', 'mark', 'code', 'kbd', 'sup', 'sub', 'del', 'ins', 'small', 'abbr', 'p', 'br', 'span', 'a']);
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const systemDarkMode = window.matchMedia('(prefers-color-scheme: dark)');
 
@@ -175,6 +175,12 @@ function inlineNodes(runs) {
     if (!INLINE_TAGS.has(run.tag)) return inlineNodes(run.children);
     const el = document.createElement(run.tag);
     if (run.tag === 'span' && run.className === 'inline-link') el.className = 'inline-link';
+    if (run.tag === 'a') {
+      el.href = run.href;
+      el.target = '_blank';
+      el.rel = 'noopener noreferrer';
+      el.className = 'inline-link';
+    }
     el.append(...inlineNodes(run.children));
     return [el];
   });
@@ -443,7 +449,7 @@ function renderArticle(article, pdfData = null, libraryItemId = null, isSaved = 
   state.pos = 0;
   state.currentBlock = -1;
   els.article.classList.remove('focused');
-  
+
   els.empty.hidden = true;
   els.libraryView.hidden = true;
   els.article.hidden = false;
@@ -463,7 +469,7 @@ function renderArticle(article, pdfData = null, libraryItemId = null, isSaved = 
 }
 
 function showHomeScreen() {
-  stopEverything();
+  stopEverything(true);
   clearPdfPreview();
   clearActiveNote();
   els.article.hidden = true;
@@ -480,13 +486,13 @@ function showLibraryScreen(section = 'history') {
   els.empty.hidden = true;
   els.article.hidden = true;
   els.libraryView.hidden = false;
-  
+
   if (state.units.length > 0) {
     els.libraryCloseText.textContent = 'Back to Article';
   } else {
     els.libraryCloseText.textContent = 'Back to Home';
   }
-  
+
   resetClearHistoryConfirm();
   els.librarySearch.value = '';
   loadLibrary(section);
@@ -947,25 +953,25 @@ function setLibrarySection(section) {
 function makeLibrarySourceRow(item) {
   const row = document.createElement('li');
   row.className = 'library-row';
-  
+
   const mainWrap = document.createElement('div');
   mainWrap.className = 'library-row-main';
 
   const type = document.createElement('div');
   type.className = 'library-type';
-  
+
   const typeTag = document.createElement('span');
   typeTag.className = 'library-type-tag';
   typeTag.textContent = sourceTypeLabel(item.type);
-  
+
   const noteBadge = item.noteCount ? ` · ${item.noteCount} ${item.noteCount === 1 ? 'NOTE' : 'NOTES'}` : '';
   const dateStr = formatLibraryDate(item.lastOpenedAt);
   type.append(typeTag, document.createTextNode(` · ${dateStr}${noteBadge}`));
-  
+
   const title = document.createElement('strong');
   title.className = 'library-entry-title';
   title.textContent = item.title || 'Untitled reading';
-  
+
   mainWrap.append(type, title);
 
   const actions = document.createElement('div');
@@ -978,7 +984,7 @@ function makeLibrarySourceRow(item) {
   save.setAttribute('aria-label', item.isSaved ? 'Remove from saved' : 'Save reading');
   save.title = item.isSaved ? 'Remove from saved' : 'Save reading';
   save.textContent = item.isSaved ? '★' : '☆';
-  
+
   save.addEventListener('click', (e) => e.stopPropagation());
 
   const remove = document.createElement('button');
@@ -992,9 +998,9 @@ function makeLibrarySourceRow(item) {
 
   actions.append(save, remove);
   row.append(mainWrap, actions);
-  
+
   row.dataset.openItem = item.id;
-  
+
   return row;
 }
 
@@ -1012,7 +1018,7 @@ function makeLibraryNoteRow(note) {
   typeTag.className = 'library-type-tag';
   typeTag.textContent = sourceTypeLabel(note.sourceType);
   type.append(typeTag, document.createTextNode(` · ${formatLibraryDate(note.createdAt)}`));
-  
+
   const source = document.createElement('strong');
   source.className = 'library-entry-title';
   source.textContent = note.sourceTitle || 'Untitled reading';
@@ -1020,11 +1026,11 @@ function makeLibraryNoteRow(note) {
   const quote = document.createElement('blockquote');
   quote.className = 'library-note-quote';
   quote.textContent = note.quote;
-  
+
   const body = document.createElement('p');
   body.className = 'library-note-body';
   body.textContent = note.body;
-  
+
   mainWrap.append(type, source, quote, body);
 
   const remove = document.createElement('button');
@@ -1035,7 +1041,7 @@ function makeLibraryNoteRow(note) {
   remove.title = 'Delete note';
   remove.textContent = '×';
   remove.addEventListener('click', (e) => e.stopPropagation());
-  
+
   const actions = document.createElement('div');
   actions.className = 'library-row-actions';
   actions.append(remove);
@@ -1064,18 +1070,18 @@ async function loadLibrary(section = activeLibrarySection) {
   els.libraryList.replaceChildren();
   els.libraryEmpty.hidden = true;
   els.libraryClearHistory.hidden = true;
-  
+
   const query = els.librarySearch.value.trim();
   const result = await api.listLibrary(section, query);
   if (!result.ok) {
     showError(`Could not open your library: ${result.error}`);
     return;
   }
-  
+
   const entries = result.entries || [];
   els.libraryList.replaceChildren(...entries.map((entry) => section === 'notes' ? makeLibraryNoteRow(entry) : makeLibrarySourceRow(entry)));
   els.libraryClearHistory.hidden = !(section === 'history' && entries.length > 0 && !query);
-  
+
   if (!entries.length) {
     setLibraryEmpty(section, Boolean(query));
     els.libraryEmpty.hidden = false;
@@ -1183,7 +1189,7 @@ els.libraryList.addEventListener('click', async (event) => {
   const openNote = event.target.closest('[data-open-note]');
   if (openNote) {
     const noteId = openNote.dataset.openNote;
-    const listing = await api.listLibrary('notes', ''); 
+    const listing = await api.listLibrary('notes', '');
     const note = listing.entries?.find((entry) => entry.id === noteId);
     if (!note) { showError('That note could not be found.'); return; }
     await openLibraryItem(note.itemId, note);
@@ -1271,15 +1277,17 @@ function release(index) {
   cache.delete(index);
 }
 
-function resetQueue() {
+function stopAudio(clearCache = false) {
   state.gen += 1;
   api.cancel();
-  for (const entry of cache.values()) if (entry.url) URL.revokeObjectURL(entry.url);
-  cache.clear();
   audio.pause();
   audio.removeAttribute('src');
   audio.load();
   state.loaded = -1;
+  if (clearCache) {
+    for (const entry of cache.values()) if (entry.url) URL.revokeObjectURL(entry.url);
+    cache.clear();
+  }
 }
 
 // ---------------------------------------------------------------- playback
@@ -1319,7 +1327,8 @@ audio.addEventListener('ended', () => {
   const finished = state.loaded;
   if (finished < 0) return;
   state.loaded = -1;
-  release(finished);
+  // Removed `release(finished)` so the audio chunk stays in memory
+  // allowing instant re-play without re-synthesizing if clicked again.
   if (state.playing) playUnit(finished + 1);
 });
 
@@ -1369,8 +1378,21 @@ const togglePlay = () => (state.playing ? pause() : play());
 
 function seekToUnit(index, autoplay = state.playing) {
   if (!state.units.length) return;
-  resetQueue();
-  state.pos = Math.min(Math.max(index, 0), state.units.length - 1);
+  const targetPos = Math.min(Math.max(index, 0), state.units.length - 1);
+
+  if (state.pos === targetPos && state.loaded === targetPos && audio.src) {
+    audio.currentTime = 0;
+    highlight(targetPos);
+    if (autoplay) {
+      state.playing = true;
+      syncButtons();
+      audio.play().then(() => setPhase('reading')).catch((err) => fail(err.message));
+    }
+    return;
+  }
+
+  stopAudio(false);
+  state.pos = targetPos;
   highlight(state.pos);
   if (autoplay) {
     state.playing = true;
@@ -1382,9 +1404,9 @@ function seekToUnit(index, autoplay = state.playing) {
   }
 }
 
-function stopEverything() {
+function stopEverything(clearCache = true) {
   state.playing = false;
-  resetQueue();
+  stopAudio(clearCache);
   syncButtons();
 }
 
@@ -1409,6 +1431,7 @@ els.prev.addEventListener('click', () => jump(-1));
 els.next.addEventListener('click', () => jump(1));
 
 els.article.addEventListener('click', (event) => {
+  if (event.target.closest('a')) return;
   const el = event.target.closest('.block');
   if (!el || window.getSelection().toString()) return;
   const block = state.blocks[Number(el.dataset.block)];
@@ -1477,7 +1500,10 @@ updateSpeed(state.speed, false);
 
 function applyVoiceChange() {
   store.set('voice.kokoro', state.voice);
-  if (state.units.length) seekToUnit(state.pos);
+  if (state.units.length) {
+    stopAudio(true);
+    seekToUnit(state.pos);
+  }
 }
 
 function fillVoices() {
