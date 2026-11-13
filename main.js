@@ -3,7 +3,6 @@
 const { app, BrowserWindow, ipcMain, net, session, dialog, protocol } = require('electron');
 const fs = require('fs');
 const path = require('path');
-
 const { loadArticle } = require('./lib/loader');
 const { TtsWorker } = require('./lib/tts-worker');
 const { textToArticle, segmentsToArticle } = require('./lib/extract');
@@ -17,6 +16,7 @@ protocol.registerSchemesAsPrivileged([{
 app.setName('voxo');
 
 // ---------------------------------------------------------------- configuration
+
 const TTS_CACHE_DIR = path.join(app.getPath('userData'), 'tts-data', 'models');
 const PDFJS_RESOURCES = path.join(__dirname, 'node_modules', 'pdfjs-dist');
 const PDF_STANDARD_FONT_DATA_URL = path.join(PDFJS_RESOURCES, 'standard_fonts') + path.sep;
@@ -25,6 +25,7 @@ const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) ' +
   'Chrome/130.0.0.0 Safari/537.36 voxo/0.1';
 const FETCH_TIMEOUT_MS = 20000;
+
 let libraryStore = null;
 
 function getLibraryStore() {
@@ -36,9 +37,18 @@ function recordInLibrary(source) {
   try {
     const store = getLibraryStore();
     const id = store.record(source);
-    return { libraryItemId: id, isSaved: store.isSaved(id) };
+    return {
+      libraryItemId: id,
+      isSaved: store.isSaved(id),
+      notes: store.listItemNotes(id),
+    };
   } catch (err) {
-    return { libraryItemId: null, isSaved: false, libraryError: err.message || String(err) };
+    return {
+      libraryItemId: null,
+      isSaved: false,
+      notes: [],
+      libraryError: err.message || String(err),
+    };
   }
 }
 
@@ -65,6 +75,7 @@ async function handlePdfResource(request) {
 }
 
 // ---------------------------------------------------------------- page fetching
+
 async function fetchHtml(url) {
   const res = await net.fetch(url, {
     headers: { 'User-Agent': USER_AGENT, Accept: 'text/html,application/xhtml+xml', 'Accept-Language': 'en' },
@@ -72,10 +83,8 @@ async function fetchHtml(url) {
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`The site answered with HTTP ${res.status}.`);
-
   const type = res.headers.get('content-type') || '';
   if (!/html|xml/i.test(type)) throw new Error(`That address is not a web page (${type || 'unknown type'}).`);
-
   const bytes = Buffer.from(await res.arrayBuffer());
   let charset = /charset=([\w-]+)/i.exec(type)?.[1];
   if (!charset) charset = /<meta[^>]+charset=["']?([\w-]+)/i.exec(bytes.subarray(0, 4096).toString('latin1'))?.[1];
@@ -104,7 +113,6 @@ async function renderHtml(url) {
   });
   win.webContents.session.setPermissionRequestHandler((_wc, _perm, callback) => callback(false));
   win.webContents.setUserAgent(USER_AGENT);
-
   try {
     let timeout;
     try {
@@ -149,16 +157,20 @@ async function renderHtml(url) {
 }
 
 // ---------------------------------------------------------------- speech worker
+
 const workerScript = path.join(__dirname, 'lib', 'tts-engine-worker.js');
 const worker = new TtsWorker({ cacheDir: TTS_CACHE_DIR, workerPath: workerScript });
+
 let mainWindow = null;
 const sendToWindow = (channel, payload) => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
 };
+
 worker.on('log', (line) => sendToWindow('tts:log', line));
 worker.on('exit', (message) => sendToWindow('tts:log', message));
 
 let voicesCache = null;
+
 function listVoices() {
   if (voicesCache) return Promise.resolve(voicesCache);
   voicesCache = {
@@ -183,6 +195,7 @@ function listVoices() {
 }
 
 // ---------------------------------------------------------------- IPC
+
 ipcMain.handle('reader:load', async (_event, input) => {
   try {
     const article = await loadArticle(input, {
@@ -200,21 +213,22 @@ ipcMain.handle('reader:text', (_event, text) => {
   try {
     const article = textToArticle(text);
     return { ok: true, article, ...recordInLibrary({ type: 'text', article, text }) };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
   }
-  catch (err) { return { ok: false, error: err.message || String(err) }; }
 });
 
 ipcMain.handle('reader:pdf', async () => {
   const picked = await dialog.showOpenDialog(mainWindow, {
-    title: 'Open a PDF', properties: ['openFile'], filters: [{ name: 'PDF documents', extensions: ['pdf'] }],
+    title: 'Open a PDF',
+    properties: ['openFile'],
+    filters: [{ name: 'PDF documents', extensions: ['pdf'] }],
   });
   if (picked.canceled || !picked.filePaths.length) return { ok: false, cancelled: true };
   let pdfDoc;
   try {
     const data = new Uint8Array(await fs.promises.readFile(picked.filePaths[0]));
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-    // PDF.js may transfer and detach its input buffer while creating its worker.
-    // Keep this original copy intact for the renderer IPC response.
     pdfDoc = await pdfjs.getDocument({
       data: data.slice(),
       useWorkerFetch: false,
@@ -258,7 +272,6 @@ ipcMain.handle('reader:pdf', async () => {
         else line += ' ';
       }
       flushLine();
-
       let proseLines = [];
       let codeLines = [];
       const flushProse = () => {
@@ -270,12 +283,16 @@ ipcMain.handle('reader:pdf', async () => {
         codeLines = [];
       };
       for (const item of lines) {
-        if (item.code) { flushProse(); codeLines.push(item.text); }
-        else { flushCode(); proseLines.push(item.text); }
+        if (item.code) {
+          flushProse();
+          codeLines.push(item.text);
+        } else {
+          flushCode();
+          proseLines.push(item.text);
+        }
       }
       flushCode();
       flushProse();
-
       page.cleanup();
     }
     const metadata = await doc.getMetadata().catch(() => null);
@@ -297,15 +314,28 @@ ipcMain.handle('reader:pdf', async () => {
       pdfData: data,
       ...recordInLibrary({ type: 'pdf', article, filePath: picked.filePaths[0] }),
     };
-  } catch (err) { return { ok: false, error: `Could not read that PDF: ${err.message || err}` }; }
-  finally { await pdfDoc?.destroy().catch(() => {}); }
+  } catch (err) {
+    return { ok: false, error: `Could not read that PDF: ${err.message || err}` };
+  } finally {
+    await pdfDoc?.destroy().catch(() => {});
+  }
 });
 
-ipcMain.handle('library:list', (_event, section) => {
+ipcMain.handle('library:list', (_event, { section, query }) => {
   try {
     const allowed = ['history', 'saved', 'notes'];
-    return { ok: true, entries: getLibraryStore().list(allowed.includes(section) ? section : 'history') };
-  } catch (err) { return { ok: false, error: err.message || String(err) }; }
+    return { ok: true, entries: getLibraryStore().list(allowed.includes(section) ? section : 'history', query) };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
+ipcMain.handle('library:item-notes', (_event, itemId) => {
+  try {
+    return { ok: true, notes: getLibraryStore().listItemNotes(itemId) };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
 });
 
 ipcMain.handle('library:open', async (_event, id) => {
@@ -315,35 +345,66 @@ ipcMain.handle('library:open', async (_event, id) => {
     let pdfData = null;
     let fileUnavailable = false;
     if (item.type === 'pdf' && item.filePath) {
-      try { pdfData = new Uint8Array(await fs.promises.readFile(item.filePath)); }
-      catch { fileUnavailable = true; }
+      try {
+        pdfData = new Uint8Array(await fs.promises.readFile(item.filePath));
+      } catch {
+        fileUnavailable = true;
+      }
     }
     return {
       ok: true,
       article: item.article,
       libraryItemId: item.id,
       isSaved: item.isSaved,
+      notes: item.notes || [],
       pdfData,
       fileUnavailable,
     };
-  } catch (err) { return { ok: false, error: err.message || String(err) }; }
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
 });
 
 ipcMain.handle('library:toggle-saved', (_event, id) => {
   try {
     const isSaved = getLibraryStore().toggleSaved(id);
     return isSaved === null ? { ok: false, error: 'That item is no longer in your library.' } : { ok: true, isSaved };
-  } catch (err) { return { ok: false, error: err.message || String(err) }; }
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
 });
 
 ipcMain.handle('library:add-note', (_event, note) => {
-  try { return { ok: true, noteId: getLibraryStore().addNote(note) }; }
-  catch (err) { return { ok: false, error: err.message || String(err) }; }
+  try {
+    const created = getLibraryStore().addNote(note);
+    return { ok: true, noteId: created.id, note: created };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
 });
 
 ipcMain.handle('library:delete-note', (_event, id) => {
-  try { return { ok: true, deleted: getLibraryStore().deleteNote(id) }; }
-  catch (err) { return { ok: false, error: err.message || String(err) }; }
+  try {
+    return { ok: true, deleted: getLibraryStore().deleteNote(id) };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
+ipcMain.handle('library:delete-item', (_event, id) => {
+  try {
+    return { ok: true, deleted: getLibraryStore().deleteItem(id) };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
+ipcMain.handle('library:clear-history', () => {
+  try {
+    return { ok: true, cleared: getLibraryStore().clearHistory() };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
 });
 
 ipcMain.handle('tts:voices', () => listVoices());
@@ -363,16 +424,17 @@ ipcMain.handle('tts:cancel', () => worker.cancelQueued());
 ipcMain.handle('tts:set-allow-download', (_event, value) => worker.setAllowDownload(value));
 
 // ---------------------------------------------------------------- window
+
 function urlFromArgs(argv) {
   return argv.find((arg) => /^https?:\/\//i.test(arg));
 }
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1000,
-    height: 820,
-    minWidth: 560,
-    minHeight: 480,
+    width: 1220,
+    height: 850,
+    minWidth: 640,
+    minHeight: 520,
     title: 'voxo',
     icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
@@ -380,7 +442,6 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      // Audio starts after an async synthesis, so it can't rely on a fresh click.
       autoplayPolicy: 'no-user-gesture-required',
     },
   });
@@ -394,6 +455,7 @@ function createWindow() {
 
   const initialUrl = urlFromArgs(process.argv);
   if (initialUrl) mainWindow.webContents.once('did-finish-load', () => sendToWindow('app:open-url', initialUrl));
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });

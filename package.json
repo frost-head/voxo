@@ -1,63 +1,62 @@
 {
-  "name": "voxo",
-  "productName": "voxo",
-  "author": "voxo",
-  "version": "0.1.0",
-  "description": "Reads web pages, pasted text and PDFs aloud with local text-to-speech",
-  "main": "main.js",
-  "private": true,
-  "scripts": {
-    "start": "electron .",
-    "test": "node test/run.js",
-    "package:mac:arm64": "electron-builder --mac dmg --arm64",
-    "package:mac:x64": "electron-builder --mac dmg --x64",
-    "package:win:x64": "electron-builder --win nsis --x64",
-    "dist:mac:arm64": "npm run package:mac:arm64",
-    "dist:mac:x64": "npm run package:mac:x64",
-    "dist:win:x64": "npm run package:win:x64"
-  },
-  "dependencies": {
-    "@mozilla/readability": "^0.6.0",
-    "better-sqlite3": "^13.0.3",
-    "jsdom": "^31.0.0",
-    "kokoro-js": "^1.2.1",
-    "pdfjs-dist": "^4.10.38"
-  },
-  "devDependencies": {
-    "electron": "^45.2.3",
-    "electron-builder": "^26.18.0"
-  },
-  "build": {
-    "appId": "com.voxo.reader",
-    "productName": "voxo",
-    "artifactName": "voxo-${version}-${os}-${arch}.${ext}",
-    "files": [
-      "**/*",
-      "!.github",
-      "!.github/**",
-      "!test",
-      "!test/**",
-      "!build",
-      "!build/**",
-      "!dist",
-      "!dist/**"
-    ],
-    "asarUnpack": [
-      "node_modules/onnxruntime-node/bin/**"
-    ],
-    "mac": {
-      "icon": "assets/icon.icns",
-      "minimumSystemVersion": "13.0",
-      "extendInfo": {
-        "CFBundleDisplayName": "voxo",
-        "CFBundleName": "voxo"
-      }
-    },
-    "win": {
-      "icon": "assets/icon.ico"
-    },
-    "linux": {
-      "icon": "assets/icon.png"
-    }
-  }
+"name": "voxo",
+"productName": "voxo",
+"author": "frost-head",
+"version": "0.2.0",
+"description": "Reads web pages, pasted text and PDFs aloud with local text-to-speech",
+"main": "main.js",
+"private": true,
+"scripts": {
+"start": "electron .",
+"test": "node test/run.js",
+"package:mac:arm64": "electron-builder --mac dmg --arm64",
+"package:mac:x64": "electron-builder --mac dmg --x64",
+"package:win:x64": "electron-builder --win nsis --x64",
+"dist:mac:arm64": "npm run package:mac:arm64",
+"dist:mac:x64": "npm run package:mac:x64",
+"dist:win:x64": "npm run package:win:x64"
+},
+"dependencies": {
+"@mozilla/readability": "^0.6.0",
+"jsdom": "^31.0.0",
+"kokoro-js": "^1.2.1",
+"pdfjs-dist": "^4.10.38",
+"sharp": "^0.35.5",
+"@img/sharp-win32-x64": "^0.35.5"
+},
+"devDependencies": {
+"electron": "^45.2.3",
+"electron-builder": "^26.18.0"
+},
+"build": {
+"appId": "com.voxo.reader",
+"productName": "voxo",
+"artifactName": "voxo-${version}-${os}-${arch}.${ext}",
+"files": [
+  "**/*",
+  "!node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+  "!node_modules/*/{test,tests,__tests__}/**",
+  "!.github/**",
+  "!test/**",
+  "!build/**",
+  "!dist/**"
+],
+"asarUnpack": [
+"node_modules/onnxruntime-node/bin/"
+],
+"mac": {
+"icon": "assets/icon.icns",
+"minimumSystemVersion": "13.0",
+"extendInfo": {
+"CFBundleDisplayName": "voxo",
+"CFBundleName": "voxo"
+}
+},
+"win": {
+"icon": "assets/icon.ico"
+},
+"linux": {
+"icon": "assets/icon.png"
+}
+}
 }
