@@ -1,0 +1,23 @@
+packages: []
+
+allowBuilds:
+  electron-winstaller: false
+  onnxruntime-node: false
+  protobufjs: false
+  sharp: false
+supportedArchitectures:
+  os:
+    - current
+    - darwin
+    - win32
+    - linux
+  cpu:
+    - current
+    - arm64
+    - x64
+  libc:
+    - current
+    - glibc
+overrides:
+  "@huggingface/transformers": 3.8.1
+  sharp: 0.34.5

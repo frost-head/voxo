@@ -3,75 +3,590 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy"
-        content="default-src 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self'; img-src 'self' data: https: http:; media-src blob:; connect-src voxo-pdf:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self'; img-src 'self' data: blob: https: http:; media-src blob:; connect-src voxo-pdf:">
   <title>voxo</title>
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
-  <header class="bar">
-    <div class="bar-left">
-      <button id="home-btn" class="brand" type="button" title="Return to home">
-        <img src="../assets/icon.svg" alt="">
-        <span>voxo</span>
+<body class="no-reading">
+
+  <!-- ============================================================ Sidebar -->
+  <nav id="app-sidebar" class="app-sidebar" aria-label="Main">
+    <div class="sidebar-header">
+      <div class="sidebar-top">
+        <button id="brand-btn" class="brand" type="button" title="Home">
+          <img src="../assets/icon.svg" alt="">
+          <span>voxo</span>
+        </button>
+        <button id="sidebar-toggle" class="icon-btn" type="button" title="Collapse sidebar (Ctrl/⌘ B)" aria-label="Collapse sidebar" aria-expanded="true">
+          <svg class="ico" data-icon="sidebar"></svg>
+        </button>
+      </div>
+      <button id="add-reading-btn" class="btn btn-primary btn-block" type="button" title="Add a link, text or PDF (Ctrl/⌘ L)">
+        <svg class="ico" data-icon="plus"></svg><span>New reading</span>
       </button>
     </div>
 
-    <div class="bar-center">
-      <form id="url-form" class="omnibox" autocomplete="off">
-        <svg class="omnibox-icon" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M10.5 13.5a3.5 3.5 0 0 1 0-4.95l2-2a3.5 3.5 0 0 1 4.95 4.95l-1.1 1.1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-          <path d="M13.5 10.5a3.5 3.5 0 0 1 0 4.95l-2 2a3.5 3.5 0 0 1-4.95-4.95l1.1-1.1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-        </svg>
-        <label class="sr-only" for="url">Article link</label>
-        <input id="url" type="text" inputmode="url" spellcheck="false" placeholder="Paste an article URL to read and listen…">
-        <button id="go" type="submit">Open</button>
-      </form>
-      <div class="quick-sources" role="group" aria-label="Import sources">
-        <button id="text-open" class="source-button" type="button" title="Paste or write text">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <span>Text</span>
+    <div class="sidebar-scrollable">
+      <div class="sidebar-group">
+        <p class="eyebrow">WORKSPACE</p>
+        <button id="nav-read" class="sidebar-link is-active" type="button" aria-current="page">
+          <svg class="ico" data-icon="book"></svg><span class="sidebar-label">Read</span>
         </button>
-        <button id="pdf-open" class="source-button" type="button" title="Open a PDF document">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 3v5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
-          <span>PDF</span>
+        <button id="nav-notes-workspace" class="sidebar-link" type="button">
+          <svg class="ico" data-icon="pencil"></svg><span class="sidebar-label">Notes</span><span id="count-notes" class="sidebar-count" hidden></span>
         </button>
+        <button id="nav-library-workspace" class="sidebar-link" type="button">
+          <svg class="ico" data-icon="archive"></svg><span class="sidebar-label">Archive</span><span id="count-archive" class="sidebar-count" hidden></span>
+        </button>
+      </div>
+
+      <div class="sidebar-group">
+        <p class="eyebrow">RECENT</p>
+        <div id="sidebar-recents" class="sidebar-recents-list"></div>
+      </div>
+
+      <div id="sidebar-saved-group" class="sidebar-group" hidden>
+        <p class="eyebrow">SAVED</p>
+        <div id="sidebar-saved" class="sidebar-recents-list"></div>
       </div>
     </div>
 
-    <div class="bar-right">
-      <button id="library-open" class="nav-pill" type="button">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19v20H6.5a2.5 2.5 0 0 1 0-5H19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span>Library</span>
+    <div class="sidebar-footer">
+      <button id="palette-btn" class="sidebar-link" type="button" title="Search and commands (Ctrl/⌘ K)">
+        <svg class="ico" data-icon="command"></svg><span class="sidebar-label">Quick search</span><kbd class="sidebar-kbd">⌘K</kbd>
       </button>
+      <button id="shortcuts-btn" class="sidebar-link" type="button" title="Keyboard shortcuts (?)">
+        <svg class="ico" data-icon="keyboard"></svg><span class="sidebar-label">Shortcuts</span>
+      </button>
+      <button id="settings-btn" class="sidebar-link" type="button" title="Settings">
+        <svg class="ico" data-icon="settings"></svg><span class="sidebar-label">Settings</span>
+      </button>
+    </div>
+  </nav>
 
-      <details id="reading-settings" class="options">
-        <summary title="Typography and theme">
-          <span class="summary-aa" aria-hidden="true">Aa</span>
-          <span>Reading</span>
-        </summary>
-        <div class="panel reading-panel">
-          <div class="panel-header">
-            <p class="panel-eyebrow">APPEARANCE</p>
-            <p class="panel-title">Reading environment</p>
+  <!-- ============================================================ Main -->
+  <div class="app-main-wrapper">
+    <div id="loader" class="loader" hidden><span></span></div>
+
+    <header class="bar">
+      <div class="bar-left">
+        <h2 id="bar-title" class="bar-title">Home</h2>
+        <span id="bar-sub" class="bar-sub"></span>
+      </div>
+
+      <div class="bar-center">
+        <div id="omnibox-wrap" class="omnibox-wrap" hidden>
+          <form id="url-form" class="omnibox" autocomplete="off">
+            <svg class="ico omnibox-icon" data-icon="link"></svg>
+            <label class="sr-only" for="url">Article link</label>
+            <input id="url" type="text" inputmode="url" spellcheck="false" placeholder="Open another article…  paste a link">
+            <button id="go" class="btn btn-primary btn-sm" type="submit">Open</button>
+          </form>
+          <button id="text-open" class="btn btn-secondary btn-sm" type="button" title="Read pasted text">
+            <svg class="ico" data-icon="type"></svg>Text
+          </button>
+          <button id="pdf-open" class="btn btn-secondary btn-sm" type="button" title="Open a PDF">
+            <svg class="ico" data-icon="file"></svg>PDF
+          </button>
+        </div>
+        <button id="bar-search" class="bar-search" type="button" title="Search readings, notes and commands (Ctrl/⌘ K)">
+          <svg class="ico" data-icon="search"></svg>
+          <span>Search or jump to…</span>
+          <kbd>Ctrl K</kbd>
+        </button>
+      </div>
+
+      <div class="bar-right">
+        <button id="focus-toggle" class="icon-btn" type="button" title="Focus mode (F)" aria-label="Focus mode" hidden>
+          <svg class="ico" data-icon="focus"></svg>
+        </button>
+        <button id="theme-toggle" class="icon-btn" type="button" title="Switch light / dark" aria-label="Switch light or dark theme">
+          <svg class="ico" data-icon="moon"></svg>
+        </button>
+        <button id="notes-toggle" class="btn btn-secondary btn-sm notes-toggle-btn" type="button" aria-pressed="false" title="Notes for this reading (Ctrl/⌘ J)" hidden>
+          <svg class="ico" data-icon="message"></svg>Notes <span id="notes-count-badge" class="count-badge" hidden></span>
+        </button>
+      </div>
+    </header>
+
+    <div id="banner" class="banner" role="alert" hidden>
+      <svg class="ico" data-icon="inbox"></svg>
+      <div class="banner-text">
+        <p id="banner-text"></p>
+        <p id="banner-hint" class="banner-hint" hidden></p>
+      </div>
+      <button id="banner-close" class="btn btn-ghost btn-sm" type="button" aria-label="Dismiss message">Dismiss</button>
+    </div>
+
+    <div id="focus-controls" class="focus-controls" hidden>
+      <button id="focus-notes" class="btn btn-secondary btn-sm" type="button" aria-pressed="false" title="Notes for this reading (Ctrl/⌘ J)">
+        <svg class="ico" data-icon="message"></svg>Notes
+      </button>
+      <button id="focus-exit" class="btn btn-secondary btn-sm" type="button">
+        <svg class="ico" data-icon="unfocus"></svg>Exit focus <kbd>Esc</kbd>
+      </button>
+    </div>
+
+    <div class="workspace">
+
+      <!-- ======================================================== READ view -->
+      <main id="scroller" class="scroller view">
+        <section id="empty" class="empty">
+          <div class="hero">
+            <p id="greeting-eyebrow" class="hero-eyebrow"></p>
+            <h1 id="greeting" class="hero-title">Welcome.</h1>
+            <p id="greeting-sub" class="hero-sub">Paste a link, drop in some text, or open a PDF. voxo reads it to you and remembers where you stopped.</p>
+
+            <div class="hero-card">
+              <form id="hero-form" class="hero-form" autocomplete="off">
+                <svg class="ico hero-icon" data-icon="link"></svg>
+                <label class="sr-only" for="hero-url">Article link</label>
+                <input id="hero-url" type="text" inputmode="url" spellcheck="false" placeholder="Paste a web article link…">
+                <button id="hero-go" class="btn btn-primary" type="submit">Read</button>
+              </form>
+              <div class="hero-footer">
+                <div class="hero-actions">
+                  <button id="hero-text-btn" class="btn btn-secondary btn-sm" type="button"><svg class="ico" data-icon="type"></svg>Paste text</button>
+                  <button id="hero-pdf-btn" class="btn btn-secondary btn-sm" type="button"><svg class="ico" data-icon="file"></svg>Open a PDF</button>
+                  <button id="hero-sample-btn" class="btn btn-ghost btn-sm" type="button"><svg class="ico" data-icon="sparkle"></svg>Try a sample</button>
+                </div>
+                <span class="hero-hint">or drop a PDF or link anywhere</span>
+              </div>
+            </div>
+
+            <div id="stats" class="insights" hidden></div>
+          </div>
+
+          <div id="resume-section" class="home-section" hidden>
+            <div class="section-header"><h2>Pick up where you left off</h2></div>
+            <div id="resume-card"></div>
+          </div>
+
+          <section id="discover-section" class="home-section discover" aria-label="Discover" hidden></section>
+
+          <div id="recent-section" class="home-section" hidden>
+            <div class="section-header">
+              <h2>Recent readings</h2>
+              <button id="hero-recent-view-all" class="link-btn" type="button">Open archive <svg class="ico" data-icon="arrow-right"></svg></button>
+            </div>
+            <ul id="recent-stack" class="recent-stack"></ul>
+          </div>
+        </section>
+
+        <article id="article" class="page" hidden>
+          <div id="marker" class="marker" aria-hidden="true"></div>
+          <div class="source-header-actions">
+            <p id="source-label" class="source-label"></p>
+            <div class="article-actions">
+              <label id="lang-chip" class="btn btn-secondary btn-sm lang-chip" title="Reading language: voxo picks the voice from the text">
+                <svg class="ico" data-icon="globe"></svg><span id="lang-chip-label">English</span>
+                <select id="lang-select" aria-label="Reading language"></select>
+              </label>
+              <button id="bookmark-toggle" class="btn btn-secondary btn-sm bookmark-toggle" type="button" aria-pressed="false" title="Save to your archive">
+                <svg class="ico" data-icon="bookmark"></svg><span>Save</span>
+              </button>
+            </div>
+          </div>
+          <h1 id="title" class="title block" title="Listen from the start"></h1>
+          <p id="meta" class="meta"></p>
+
+          <div id="reader-tip" class="tip" hidden>
+            <svg class="ico" data-icon="sparkle"></svg>
+            <p><strong>Tip:</strong> click any paragraph to listen from there, and select text to highlight it or add a note.</p>
+            <button id="tip-dismiss" class="icon-btn small" type="button" aria-label="Dismiss tip"><svg class="ico" data-icon="x"></svg></button>
+          </div>
+
+          <details id="pdf-preview" class="pdf-preview" hidden>
+            <summary id="pdf-preview-title">PDF page previews</summary>
+            <div id="pdf-preview-pages"></div>
+            <button id="pdf-preview-more" class="btn btn-primary btn-sm" type="button" hidden>Show more pages</button>
+          </details>
+          <div id="body"></div>
+          <section id="finish-card" class="finish-card" hidden aria-live="polite"></section>
+        </article>
+      </main>
+
+      <!-- ======================================================== Notes pane -->
+      <aside id="notes-pane" class="notes-pane" hidden aria-label="Notes for this reading">
+        <div id="notes-resizer" class="resizer" role="separator" aria-orientation="vertical" aria-label="Resize notes pane (drag, or use arrow keys; double-click to reset)" tabindex="0"></div>
+        <div class="pane-header">
+          <div>
+            <p class="eyebrow">THIS READING</p>
+            <h3 class="pane-title">Notes &amp; highlights</h3>
+          </div>
+          <div class="pane-header-actions">
+            <button id="pane-export" class="icon-btn" type="button" title="Export notes for this reading" aria-label="Export notes for this reading"><svg class="ico" data-icon="download"></svg></button>
+            <button id="notes-pane-close" class="icon-btn" type="button" title="Close (Ctrl/⌘ J)" aria-label="Close notes pane"><svg class="ico" data-icon="x"></svg></button>
+          </div>
+        </div>
+
+        <form id="note-form" class="note-composer">
+          <div class="note-anchor-bar">
+            <div class="note-anchor-status">
+              <span id="anchor-dot" class="anchor-dot"></span>
+              <span id="anchor-label" class="anchor-label">Following playback</span>
+            </div>
+            <button id="anchor-reset" type="button" class="btn btn-ghost btn-xs" hidden>Reset</button>
+          </div>
+          <blockquote id="note-composer-quote" class="note-composer-quote" hidden></blockquote>
+          <label class="sr-only" for="note-body">Write a note</label>
+          <textarea id="note-body" placeholder="Write a note…  (Markdown supported)" rows="2"></textarea>
+          <div id="note-composer-footer" class="note-composer-footer" hidden>
+            <div id="composer-colors" class="swatches" role="radiogroup" aria-label="Note color"></div>
+            <div class="composer-buttons">
+              <span class="hint-text">Ctrl/⌘ Enter to save</span>
+              <button id="note-submit" class="btn btn-primary btn-sm" type="submit" disabled>Save note</button>
+            </div>
+          </div>
+        </form>
+
+        <div class="notes-stream-scroller">
+          <ul id="article-notes-list" class="article-notes-list"></ul>
+          <div id="article-notes-empty" class="empty-state compact">
+            <svg class="ico empty-icon" data-icon="pencil"></svg>
+            <p class="empty-title">Nothing marked yet</p>
+            <p class="empty-copy">Select text in the article to highlight it, or press the pencil beside any paragraph.</p>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ======================================================== NOTES workspace -->
+      <section id="notes-workspace-view" class="workspace-view view" hidden>
+        <div class="nw-layout">
+          <aside class="nw-nav" aria-label="Notebooks and tags">
+            <div class="nw-nav-section">
+              <p class="eyebrow">LIBRARY</p>
+              <ul id="nw-smart-list" class="nw-nav-list"></ul>
+            </div>
+            <div class="nw-nav-section">
+              <div class="nw-nav-heading">
+                <p class="eyebrow">NOTEBOOKS</p>
+                <button id="nw-new-notebook" class="icon-btn small" type="button" title="New notebook" aria-label="New notebook"><svg class="ico" data-icon="plus"></svg></button>
+              </div>
+              <ul id="nw-notebook-list" class="nw-nav-list"></ul>
+            </div>
+            <div class="nw-nav-section">
+              <p class="eyebrow">ARTICLES</p>
+              <ul id="nw-source-list" class="nw-nav-list"></ul>
+            </div>
+            <div class="nw-nav-section">
+              <div class="nw-nav-heading">
+                <p class="eyebrow">TAGS</p>
+                <div id="nw-tag-mode" class="segmented mini" role="group" aria-label="How multiple tags combine" hidden>
+                  <button type="button" data-mode="all" title="Notes with ALL selected tags">All</button>
+                  <button type="button" data-mode="any" title="Notes with ANY selected tag">Any</button>
+                </div>
+              </div>
+              <div id="nw-tag-list" class="tag-cloud"></div>
+            </div>
+          </aside>
+
+          <div class="nw-list-col">
+            <div class="nw-list-header">
+              <h2 id="nw-list-title" class="col-title">All notes</h2>
+              <div class="nw-list-actions">
+                <button id="nw-select-toggle" class="icon-btn" type="button" aria-pressed="false" title="Select several notes" aria-label="Select several notes"><svg class="ico" data-icon="check"></svg></button>
+                <button id="nw-export" class="icon-btn" type="button" title="Export this list as Markdown" aria-label="Export this list as Markdown"><svg class="ico" data-icon="download"></svg></button>
+                <button id="ws-new-note" class="btn btn-primary btn-sm" type="button"><svg class="ico" data-icon="plus"></svg>New note</button>
+              </div>
+            </div>
+            <div class="nw-search-wrap">
+            <div class="search-field">
+              <svg class="ico" data-icon="search"></svg>
+              <label class="sr-only" for="ws-search-input">Search notes</label>
+              <input id="ws-search-input" type="search" placeholder="Search…  try title:vulkan  nb:research  tag:audio" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="nw-suggest">
+            </div>
+              <div id="nw-suggest" class="nw-suggest" role="listbox" hidden></div>
+            </div>
+            <div class="nw-list-tools">
+              <button id="nw-smart" class="chip chip-sm" type="button" aria-pressed="false" title="Search by meaning: ask in plain words, like “how do I draw a triangle”"><svg class="ico" data-icon="sparkle"></svg>Search by meaning</button>
+              <label class="nw-group-field"><span>Group</span>
+                <select id="nw-group" class="select select-sm" aria-label="Group notes by">
+                  <option value="none">None</option>
+                  <option value="source">By source</option>
+                  <option value="notebook">By notebook</option>
+                </select>
+              </label>
+            </div>
+            <p id="nw-smart-note" class="nw-smart-note" hidden></p>
+            <div id="nw-color-filter" class="swatches filter-swatches" role="group" aria-label="Filter by color"></div>
+            <div id="nw-active-filters" class="nw-active-filters" aria-label="Active filters"></div>
+            <div id="nw-bulk" class="nw-bulk" role="toolbar" aria-label="Actions for selected notes" hidden></div>
+            <div class="nw-list-scroll">
+              <ul id="ws-notes-list" class="ws-notes-list"></ul>
+              <div id="ws-notes-empty" class="empty-state compact" hidden>
+                <svg class="ico empty-icon" data-icon="pencil"></svg>
+                <p class="empty-title">No notes here yet</p>
+                <p class="empty-copy">Highlight text while reading, or start a note of your own.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="nw-editor" id="nw-editor">
+            <div id="nw-editor-empty" class="empty-state">
+              <svg class="ico empty-icon" data-icon="book"></svg>
+              <p class="empty-title">Pick a note to read or edit</p>
+              <p class="empty-copy">Everything you highlight while reading lands here, ready to organise.</p>
+            </div>
+            <div id="nw-editor-body" class="nw-editor-body" hidden>
+              <div class="ws-editor-header">
+                <p id="ws-editor-source" class="ws-editor-source"></p>
+                <div class="editor-actions">
+                  <span id="ws-save-state" class="save-state" aria-live="polite"></span>
+                  <button id="ws-open-source" class="btn btn-secondary btn-sm" type="button" hidden>Open in reader <svg class="ico" data-icon="arrow-right"></svg></button>
+                  <button id="ws-pin" class="icon-btn" type="button" aria-pressed="false" title="Pin to top" aria-label="Pin note"><svg class="ico" data-icon="pin"></svg></button>
+                  <button id="ws-export-one" class="icon-btn" type="button" title="Export this note" aria-label="Export this note"><svg class="ico" data-icon="download"></svg></button>
+                  <button id="ws-delete" class="icon-btn danger" type="button" title="Delete note (click twice)" aria-label="Delete note"><svg class="ico" data-icon="trash"></svg></button>
+                </div>
+              </div>
+              <div class="ws-editor-content">
+                <label class="sr-only" for="ws-note-title">Note title</label>
+                <input id="ws-note-title" class="ws-note-title-input" type="text" placeholder="Untitled note" maxlength="200">
+                <div class="editor-meta-row">
+                  <div id="ws-colors" class="swatches" role="radiogroup" aria-label="Note color"></div>
+                  <label class="meta-field">
+                    <span>Notebook</span>
+                    <select id="ws-notebook-select" class="select"></select>
+                  </label>
+                </div>
+                <div class="tag-editor" id="ws-tag-editor">
+                  <div id="ws-tag-chips" class="tag-chips"></div>
+                  <label class="sr-only" for="ws-tag-input">Add tag</label>
+                  <input id="ws-tag-input" type="text" placeholder="Add a tag, press Enter" maxlength="32" list="ws-tag-suggestions">
+                  <datalist id="ws-tag-suggestions"></datalist>
+                </div>
+                <blockquote id="ws-quote" class="ws-quote" hidden></blockquote>
+                <div class="editor-tabs" role="tablist" aria-label="Editor mode">
+                  <button id="ws-tab-write" class="tab" type="button" role="tab" aria-selected="true">Write</button>
+                  <button id="ws-tab-preview" class="tab" type="button" role="tab" aria-selected="false">Preview</button>
+                  <span id="ws-word-count" class="word-count"></span>
+                </div>
+                <label class="sr-only" for="ws-note-body">Note body</label>
+                <textarea id="ws-note-body" class="ws-note-body-input" placeholder="Start writing…  Markdown works: **bold**, *italic*, `code`, - lists, > quotes"></textarea>
+                <div id="ws-preview" class="md-preview md" hidden></div>
+                <div id="ws-wl-suggest" class="wl-suggest" role="listbox" hidden></div>
+                <section id="ws-links" class="ws-links" aria-label="Connections" hidden></section>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================== ARCHIVE -->
+      <section id="library-workspace-view" class="workspace-view view" hidden>
+        <div class="library-shell-full">
+          <header class="library-header-full">
+            <div>
+              <h2 class="view-title">Archive</h2>
+              <p class="view-intro">Everything you've opened, with your place saved so you can pick up again.</p>
+            </div>
+            <div class="search-field wide">
+              <svg class="ico" data-icon="search"></svg>
+              <label class="sr-only" for="lib-search-input">Search archive</label>
+              <input id="lib-search-input" type="search" placeholder="Search archive…  ( / )">
+            </div>
+          </header>
+          <div class="library-toolbar-full">
+            <nav class="tabs" role="tablist" aria-label="Archive sections">
+              <button class="tab" type="button" role="tab" data-library-tab="history" aria-selected="true">History</button>
+              <button class="tab" type="button" role="tab" data-library-tab="progress" aria-selected="false">In progress</button>
+              <button class="tab" type="button" role="tab" data-library-tab="saved" aria-selected="false">Saved</button>
+            </nav>
+            <button id="library-clear-btn" class="btn btn-ghost btn-sm" type="button">Clear history</button>
+          </div>
+          <div class="library-content-full">
+            <ul id="library-list" class="library-list-full"></ul>
+            <div id="library-empty" class="empty-state" hidden>
+              <svg class="ico empty-icon" data-icon="archive"></svg>
+              <p id="library-empty-title" class="empty-title"></p>
+              <p id="library-empty-hint" class="empty-copy"></p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+    <!-- ======================================================== Player -->
+    <footer id="dock" class="dock" aria-label="Player">
+      <div id="progress-bar" class="progress" role="slider" tabindex="0" aria-label="Reading progress. Click to jump." aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div id="progress-fill"></div>
+      </div>
+      <div class="controls">
+        <button id="prev" class="dock-btn" type="button" aria-label="Previous paragraph" title="Previous paragraph (←)" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9.5 12z"/></svg>
+        </button>
+        <button id="play" class="dock-btn play" type="button" aria-label="Play" title="Play / pause (Space)" disabled>
+          <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+          <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+        </button>
+        <button id="next" class="dock-btn" type="button" aria-label="Next paragraph" title="Next paragraph (→)" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l10.5-7z"/></svg>
+        </button>
+      </div>
+      <button id="readout" class="readout" type="button" aria-live="polite" title="Go to this reading">
+        <span id="status">Choose something to read.</span>
+        <span class="left-line"><span id="now-title" class="now-title"></span><span id="left" class="left"></span></span>
+      </button>
+      <label id="sleep-pill" class="pill-select" title="Sleep timer: off">
+        <svg class="ico" data-icon="clock"></svg>
+        <select id="sleep-timer" aria-label="Sleep timer">
+          <option value="0">Sleep timer: off</option>
+          <option value="10">Stop after 10 min</option>
+          <option value="20">Stop after 20 min</option>
+          <option value="30">Stop after 30 min</option>
+          <option value="60">Stop after 60 min</option>
+          <option value="block">Stop after this paragraph</option>
+        </select>
+      </label>
+      <label class="speed">
+        <span>Speed</span>
+        <output id="speed-value" for="speed">1.0×</output>
+        <input id="speed" type="range" min="0.6" max="2.4" step="0.1" value="1" aria-label="Reading speed" aria-valuetext="1 times speed">
+      </label>
+    </footer>
+  </div>
+
+  <!-- ============================================================ Floating selection toolbar -->
+  <div id="selection-toolbar" class="selection-toolbar" role="toolbar" aria-label="Highlight selection" hidden>
+    <div id="selection-colors" class="swatches"></div>
+    <span class="toolbar-divider" aria-hidden="true"></span>
+    <button id="selection-note" class="toolbar-btn" type="button"><svg class="ico" data-icon="pencil"></svg>Note</button>
+    <button id="selection-copy" class="toolbar-btn" type="button">Copy</button>
+  </div>
+
+  <div id="drop-overlay" class="drop-overlay" hidden>
+    <div class="drop-card">
+      <svg class="ico" data-icon="download"></svg>
+      <strong>Drop to read</strong>
+      <span>A PDF, a web link, or some text</span>
+    </div>
+  </div>
+
+  <!-- ============================================================ Dialogs -->
+  <dialog id="palette" class="palette-dialog" aria-label="Quick search">
+    <div class="palette-box">
+      <div class="palette-input-row">
+        <svg class="ico" data-icon="search"></svg>
+        <label class="sr-only" for="palette-input">Search readings, notes and commands</label>
+        <input id="palette-input" type="text" placeholder="Search readings, notes, or type a command…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="palette-list">
+        <kbd>Esc</kbd>
+      </div>
+      <ul id="palette-list" class="palette-list" role="listbox"></ul>
+      <div class="palette-footer"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Enter</kbd> open</span></div>
+    </div>
+  </dialog>
+
+  <dialog id="topic-dialog" class="modal modal-wide" aria-labelledby="topic-title">
+    <div class="modal-form topic-form">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow"><svg class="ico" data-icon="network"></svg> TOPIC</p>
+          <h2 id="topic-title" class="modal-title"></h2>
+          <p id="topic-summary" class="hint"></p>
+        </div>
+        <button id="topic-close" class="icon-btn" type="button" aria-label="Close"><svg class="ico" data-icon="x"></svg></button>
+      </div>
+      <div class="modal-scroll">
+        <div id="topic-graph" class="topic-graph" hidden></div>
+        <div id="topic-related" class="topic-related"></div>
+        <div id="topic-list"></div>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="text-dialog" class="modal">
+    <form id="text-form" class="modal-form" method="dialog">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow accent">YOUR TEXT</p>
+          <h2 class="modal-title">Read custom text</h2>
+        </div>
+        <button id="text-cancel" class="icon-btn" type="button" aria-label="Close dialog"><svg class="ico" data-icon="x"></svg></button>
+      </div>
+      <label class="sr-only" for="custom-text">Text to read</label>
+      <textarea id="custom-text" class="modal-textarea" placeholder="Paste or write anything you'd like to hear…"></textarea>
+      <div class="dialog-actions">
+        <span id="custom-text-count" class="word-count"></span>
+        <span class="hint-text">Ctrl/⌘ Enter</span>
+        <button id="text-submit" class="btn btn-primary" type="submit">Open in reader</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="prompt-dialog" class="modal modal-sm">
+    <form id="prompt-form" class="modal-form" method="dialog">
+      <h2 id="prompt-title" class="modal-title">Name</h2>
+      <label class="sr-only" for="prompt-input">Name</label>
+      <input id="prompt-input" class="input" type="text" maxlength="80" autocomplete="off">
+      <div class="dialog-actions">
+        <button id="prompt-cancel" class="btn btn-ghost" type="button">Cancel</button>
+        <button id="prompt-ok" type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="shortcuts-dialog" class="modal">
+    <div class="modal-form">
+      <div class="modal-header">
+        <h2 class="modal-title">Keyboard shortcuts</h2>
+        <button id="shortcuts-close" class="icon-btn" type="button" aria-label="Close shortcuts"><svg class="ico" data-icon="x"></svg></button>
+      </div>
+      <div class="modal-scroll">
+        <p class="eyebrow">LISTENING</p>
+        <dl class="shortcut-list">
+          <div><dt><kbd>Space</kbd></dt><dd>Play / pause</dd></div>
+          <div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Previous / next paragraph</dd></div>
+          <div><dt><kbd>[</kbd> <kbd>]</kbd></dt><dd>Slower / faster</dd></div>
+          <div><dt><kbd>F</kbd></dt><dd>Focus mode (hide everything but the text)</dd></div>
+        </dl>
+        <p class="eyebrow">MARKING UP</p>
+        <dl class="shortcut-list">
+          <div><dt><kbd>H</kbd></dt><dd>Highlight the selection (last color)</dd></div>
+          <div><dt><kbd>N</kbd></dt><dd>Add a note to the selection or paragraph</dd></div>
+          <div><dt><kbd>Ctrl/⌘</kbd> <kbd>J</kbd></dt><dd>Show / hide the notes pane</dd></div>
+          <div><dt><kbd>Ctrl/⌘</kbd> <kbd>Enter</kbd></dt><dd>Save the note you're writing</dd></div>
+        </dl>
+        <p class="eyebrow">GETTING AROUND</p>
+        <dl class="shortcut-list">
+          <div><dt><kbd>Ctrl/⌘</kbd> <kbd>K</kbd></dt><dd>Quick search: readings, notes, commands</dd></div>
+          <div><dt><kbd>Ctrl/⌘</kbd> <kbd>B</kbd></dt><dd>Collapse / expand the sidebar</dd></div>
+          <div><dt><kbd>Ctrl/⌘</kbd> <kbd>L</kbd></dt><dd>Add a new reading</dd></div>
+          <div><dt><kbd>/</kbd></dt><dd>Search within Notes or Archive</dd></div>
+          <div><dt><kbd>Esc</kbd></dt><dd>Close, clear selection, leave focus mode</dd></div>
+          <div><dt><kbd>?</kbd></dt><dd>Show this list</dd></div>
+        </dl>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="settings-dialog" class="modal">
+    <div class="modal-form">
+      <div class="modal-header">
+        <h2 class="modal-title">Settings</h2>
+        <button id="settings-close" class="icon-btn" type="button" aria-label="Close settings"><svg class="ico" data-icon="x"></svg></button>
+      </div>
+      <div class="modal-scroll">
+        <div class="settings-section">
+          <p class="eyebrow">APPEARANCE</p>
+          <div class="field">
+            <span>Theme</span>
+            <div id="theme-seg" class="segmented" role="radiogroup" aria-label="Color theme">
+              <button type="button" role="radio" data-theme-choice="system"><svg class="ico" data-icon="monitor"></svg>System</button>
+              <button type="button" role="radio" data-theme-choice="light"><svg class="ico" data-icon="sun"></svg>Light</button>
+              <button type="button" role="radio" data-theme-choice="dark"><svg class="ico" data-icon="moon"></svg>Dark</button>
+            </div>
           </div>
           <label class="field">
-            <span>Color theme</span>
-            <select id="color-theme">
-              <option value="dark">Whisper Obsidian (Dark)</option>
-              <option value="light">Warm Paper (Light)</option>
-              <option value="system">System Default</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>Typeface</span>
-            <select id="font-style">
-              <option value="serif">Editorial Serif (Charter)</option>
-              <option value="literary">Literary Serif (Baskerville)</option>
-              <option value="classic">Classic Book (Palatino)</option>
-              <option value="sans">Modern Sans (Inter)</option>
-              <option value="humanist">Humanist Sans (Optima / Gill)</option>
-              <option value="mono">Technical Mono (SF Mono)</option>
+            <span>Font</span>
+            <select id="font-style" class="select">
+              <option value="serif">Editorial Serif</option>
+              <option value="literary">Literary Serif</option>
+              <option value="classic">Classic Book</option>
+              <option value="sans">Modern Sans</option>
+              <option value="humanist">Humanist Sans</option>
+              <option value="mono">Technical Mono</option>
             </select>
           </label>
           <label class="field range-field">
@@ -79,275 +594,56 @@
             <input id="font-size" type="range" min="16" max="28" step="1" value="20">
           </label>
           <label class="field range-field">
-            <span>Column width <output id="line-width-value" for="line-width">96 chars</output></span>
-            <input id="line-width" type="range" min="60" max="112" step="2" value="96">
+            <span>Line width <output id="line-width-value" for="line-width">72 chars</output></span>
+            <input id="line-width" type="range" min="50" max="112" step="2" value="72">
           </label>
           <label class="field range-field">
             <span>Line spacing <output id="line-spacing-value" for="line-spacing">1.8×</output></span>
             <input id="line-spacing" type="range" min="1.4" max="2.2" step="0.1" value="1.8">
           </label>
-        </div>
-      </details>
-
-      <details id="options" class="options">
-        <summary title="Voice and speech model">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M8 7v10M4 10v4M16 7v10M20 10v4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <span>Voice</span>
-        </summary>
-        <div class="panel">
-          <div class="panel-header">
-            <p class="panel-eyebrow">LOCAL NEURAL SPEECH</p>
-            <p class="panel-title">Voice &amp; model</p>
+          <div class="type-preview" id="type-preview" aria-label="Preview of your reading style">
+            <p>Reading is a conversation across time. A writer leaves behind a trail of thought, and a reader, sometimes centuries later, walks that trail and finds it still warm.</p>
           </div>
+          <label class="switch-row">
+            <input id="auto-scroll" type="checkbox" class="switch" checked>
+            <span>Scroll to follow the voice</span>
+          </label>
+          <button id="reset-reading" class="btn btn-ghost btn-sm align-start" type="button"><svg class="ico" data-icon="reset"></svg>Reset appearance</button>
+        </div>
+
+        <div class="settings-section settings-section-secondary">
+          <p class="eyebrow">VOICE</p>
           <label class="field">
-            <span>Narrator voice</span>
-            <select id="voice"></select>
+            <span>Language <output id="lang-detected" for="lang-mode"></output></span>
+            <select id="lang-mode" class="select"></select>
           </label>
-          <label class="check">
-            <input id="allow-download" type="checkbox">
-            <span>Allow voice model download</span>
+          <p class="hint lang-hint">With Auto-detect, voxo recognises the language of each reading and switches to your favourite voice for it. Pick a language to override that everywhere. You can also override a single reading with the globe button above the text.</p>
+          <div class="field">
+            <span id="voice-label">Voice</span>
+            <div id="voice-list" class="voice-list" role="radiogroup" aria-labelledby="voice-label"></div>
+            <p class="hint">Press ▶ on a voice to hear it. Nothing changes until you pick it.</p>
+          </div>
+          <label class="switch-row">
+            <input id="allow-download" type="checkbox" class="switch">
+            <span>Allow the voice model to download</span>
           </label>
-          <p class="hint">Enable once and press play to cache the neural voice locally for offline listening.</p>
-          <details class="log-box">
-            <summary>Engine diagnostics</summary>
+          <p class="hint">Turn this on once, then press play. The voice downloads to this device and works offline afterwards.</p>
+          <div class="field ambient-field">
+            <span id="ambient-label">Ambient sound <small class="hint-inline">plays softly under the narrator</small></span>
+            <div id="ambient-seg" class="chip-row" role="radiogroup" aria-labelledby="ambient-label"></div>
+            <label class="field range-field ambient-volume">
+              <span>Volume <output id="ambient-volume-value" for="ambient-volume">35%</output></span>
+              <input id="ambient-volume" type="range" min="0" max="100" step="5" value="35">
+            </label>
+          </div>
+          <details class="log-box engine-log">
+            <summary>Audio setup details</summary>
             <pre id="log" tabindex="0"></pre>
           </details>
         </div>
-      </details>
-
-      <button id="notes-toggle" class="nav-pill notes-toggle-btn" type="button" aria-pressed="true" hidden title="Toggle notes sidebar (N)">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span>Notes</span>
-        <span id="notes-count-badge" class="notes-badge" hidden>0</span>
-      </button>
+      </div>
     </div>
-  </header>
-
-  <div id="banner" class="banner" role="alert" hidden>
-    <div class="banner-body">
-      <p id="banner-text"></p>
-      <p id="banner-hint" class="banner-hint" hidden></p>
-    </div>
-    <button id="banner-close" type="button" aria-label="Dismiss message">Dismiss</button>
-  </div>
-
-  <div id="workspace" class="workspace">
-    <main id="scroller" class="scroller">
-
-      <!-- Home Screen View -->
-      <section id="empty" class="empty">
-        <div class="whisper-hero">
-          <div class="whisper-title-row">
-            <h1 class="whisper-brand-heading">VOXO</h1>
-            <span class="whisper-subtitle-pill">Local Neural Reader</span>
-          </div>
-
-          <div class="whisper-prompt-card">
-            <p class="whisper-prompt-label">What would you like to read or listen to today?</p>
-            <form id="hero-url-form" class="whisper-hero-form" autocomplete="off">
-              <input id="hero-url" type="text" inputmode="url" spellcheck="false" placeholder="Paste an article link (https://…) and press Enter">
-              <button id="hero-go" type="submit">Open Article</button>
-            </form>
-            <div class="whisper-prompt-footer">
-              <div class="whisper-quick-actions">
-                <button id="card-text" class="whisper-chip" type="button">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-                  <span>Paste custom text</span>
-                </button>
-                <button id="card-pdf" class="whisper-chip" type="button">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 2v6h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
-                  <span>Open PDF document</span>
-                </button>
-                <button id="card-url" class="whisper-chip" type="button">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19v20H6.5a2.5 2.5 0 0 1 0-5H19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                  <span>Browse Library</span>
-                </button>
-              </div>
-              <span class="whisper-engine-tag">Kokoro 82M · Local ONNX</span>
-            </div>
-          </div>
-        </div>
-
-        <section id="recent-section" class="recent-section" hidden>
-          <div class="recent-header">
-            <h2>Recents</h2>
-            <button id="recent-view-all" class="text-link" type="button">All history &amp; saved →</button>
-          </div>
-          <ul id="recent-list" class="recent-stack"></ul>
-        </section>
-      </section>
-
-      <!-- Dedicated Library View -->
-      <section id="library-view" class="library-view" hidden>
-        <header class="library-header">
-          <div class="library-title-group">
-            <div class="whisper-title-row">
-              <h1 class="whisper-brand-heading">Archive</h1>
-              <span class="whisper-subtitle-pill">Your Library</span>
-            </div>
-            <p class="library-intro">Pick up where you left off, revisit bookmarked pieces, or browse every note you’ve captured across your library.</p>
-          </div>
-          <button id="library-close" class="source-button library-close-btn" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span id="library-close-text">Back to Home</span>
-          </button>
-        </header>
-
-        <div class="library-search-container">
-          <div class="library-search-bar">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m21 21-4.35-4.35" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-            <input type="search" id="library-search" placeholder="Search titles, notes, and quotes..." autocomplete="off">
-          </div>
-        </div>
-
-        <div class="library-toolbar">
-          <nav class="library-tabs" role="tablist" aria-label="Library sections">
-            <button class="library-tab" type="button" role="tab" data-library-tab="history" aria-selected="true">History</button>
-            <button class="library-tab" type="button" role="tab" data-library-tab="saved" aria-selected="false">Saved</button>
-            <button class="library-tab" type="button" role="tab" data-library-tab="notes" aria-selected="false">All Notes</button>
-          </nav>
-          <button id="library-clear-history" class="library-clear-btn" type="button" hidden>Clear history</button>
-        </div>
-
-        <section class="library-content" role="tabpanel" aria-live="polite">
-          <ul id="library-list" class="library-list"></ul>
-          <div id="library-empty" class="library-empty" hidden>
-            <div class="library-empty-mark" aria-hidden="true">✦</div>
-            <h3 id="library-empty-title"></h3>
-            <p id="library-empty-hint"></p>
-          </div>
-        </section>
-      </section>
-
-      <!-- Reader Canvas -->
-      <article id="article" class="page" hidden>
-        <div id="marker" class="marker" aria-hidden="true"></div>
-        <div class="source-header-actions">
-          <p id="source-label" class="source-label"></p>
-          <div class="article-actions">
-            <button id="bookmark-toggle" class="bookmark-toggle" type="button" aria-pressed="false">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
-              <span id="bookmark-label">Save</span>
-            </button>
-          </div>
-        </div>
-        <h1 id="title" class="title block" title="Click to listen from the title"></h1>
-        <p id="meta" class="meta"></p>
-
-        <aside id="note-callout" class="note-callout" hidden>
-          <div>
-            <p class="note-callout-label">HIGHLIGHTED NOTE</p>
-            <blockquote id="note-callout-quote"></blockquote>
-            <p id="note-callout-body"></p>
-          </div>
-          <button id="note-callout-close" type="button" aria-label="Close note">×</button>
-        </aside>
-
-        <details id="pdf-preview" class="pdf-preview" hidden>
-          <summary id="pdf-preview-title">PDF page previews</summary>
-          <div id="pdf-preview-pages"></div>
-          <button id="pdf-preview-more" class="source-button" type="button" hidden>Show more pages</button>
-        </details>
-
-        <div id="body"></div>
-      </article>
-    </main>
-
-    <!-- Notes Pane Workspace -->
-    <aside id="notes-pane" class="notes-pane" aria-label="Article notes" hidden>
-      <header class="notes-pane-header">
-        <div>
-          <p class="notes-pane-eyebrow">MARGINALIA</p>
-          <h2 class="notes-pane-title">Article Notes</h2>
-        </div>
-        <button id="notes-pane-close" class="icon-subtle" type="button" aria-label="Hide notes pane" title="Hide notes pane">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        </button>
-      </header>
-
-      <form id="note-form" class="note-composer">
-        <header class="note-composer-header">
-          <div class="note-anchor-status">
-            <span id="note-anchor-dot" class="anchor-dot"></span>
-            <span id="note-anchor-label" class="anchor-label">Listening context</span>
-          </div>
-          <button id="note-anchor-reset" class="anchor-reset-icon" type="button" hidden title="Return to live playback tracking">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-        </header>
-
-        <div class="note-composer-quote-wrap">
-          <blockquote id="note-quote" class="note-composer-quote"></blockquote>
-        </div>
-
-        <div class="note-composer-body">
-          <label class="sr-only" for="note-body">Write a note</label>
-          <textarea id="note-body" rows="3" maxlength="20000" placeholder="Jot a thought while listening… (Press N to focus)" required></textarea>
-        </div>
-
-        <footer class="note-composer-footer">
-          <span class="note-shortcut-hint">⌘/Ctrl + Enter to save</span>
-          <button id="note-submit" type="submit">Save Note</button>
-        </footer>
-      </form>
-
-      <div class="notes-stream-header">
-        <span id="notes-stream-count">0 notes on this reading</span>
-      </div>
-
-      <div class="notes-stream-scroller">
-        <ul id="article-notes-list" class="article-notes-list"></ul>
-        <div id="article-notes-empty" class="article-notes-empty">
-          <p class="notes-empty-title">No notes on this reading yet</p>
-          <p class="notes-empty-copy">As you listen, type above to attach a note to the current paragraph—or select any phrase on the page.</p>
-        </div>
-      </div>
-    </aside>
-  </div>
-
-  <!-- Custom Text Dialog (Still a modal) -->
-  <dialog id="text-dialog" class="text-dialog">
-    <form id="text-form" class="text-dialog-form" method="dialog">
-      <header class="text-dialog-header">
-        <div>
-          <p class="dialog-eyebrow">CUSTOM READING</p>
-          <h2>Add text to your reading room</h2>
-        </div>
-        <button id="text-close-x" class="close-button" type="button" aria-label="Close dialog">×</button>
-      </header>
-      <label class="sr-only" for="custom-text">Text to read</label>
-      <textarea id="custom-text" placeholder="Paste or write anything you’d like to read and hear aloud…" required></textarea>
-      <div class="dialog-actions">
-        <button id="text-cancel" class="source-button" type="button">Cancel</button>
-        <button id="text-submit" type="submit">Open in reader</button>
-      </div>
-    </form>
   </dialog>
-
-  <footer class="dock">
-    <div class="progress" aria-hidden="true"><div id="progress-fill"></div></div>
-    <div class="controls">
-      <button id="prev" class="icon" type="button" aria-label="Previous paragraph" title="Previous paragraph (←)" disabled>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9.5 12z"/></svg>
-      </button>
-      <button id="play" class="icon play" type="button" aria-label="Play" title="Play or pause (Space)" disabled>
-        <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-        <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
-      </button>
-      <button id="next" class="icon" type="button" aria-label="Next paragraph" title="Next paragraph (→)" disabled>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l10.5-7z"/></svg>
-      </button>
-    </div>
-    <div class="readout" aria-live="polite">
-      <span id="status">Choose something to read.</span>
-      <span id="left" class="left"></span>
-    </div>
-    <label class="speed">
-      <span>Pace</span>
-      <output id="speed-value" for="speed">1.0×</output>
-      <input id="speed" type="range" min="0.6" max="2.4" step="0.1" value="1" aria-label="Reading speed" aria-valuetext="1 times speed">
-    </label>
-  </footer>
 
   <script type="module" src="renderer.js"></script>
 </body>
