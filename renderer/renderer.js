@@ -12,6 +12,7 @@ import { addListening, addFinished, addWords, addTopics, topicsOf, getStats } fr
 import { initDiscover } from './discover.js';
 import { initPalette } from './palette.js';
 import { detectLanguage, LANGUAGE_NAMES } from './lang.js';
+import { createFigureRenderer } from './pdf-figures.js';
 import { persona, personaLabel } from './voices.js';
 import { createAmbient, SOUNDS } from './ambient.js';
 
@@ -28,6 +29,8 @@ for (const node of document.querySelectorAll('kbd, .hint-text, [title]')) {
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('../node_modules/pdfjs-dist/build/pdf.worker.mjs', import.meta.url).toString();
 const standardFontDataUrl = 'voxo-pdf://pdfjs/standard_fonts/';
 const cMapUrl = 'voxo-pdf://pdfjs/cmaps/';
+
+const pdfFigures = createFigureRenderer({ standardFontDataUrl, cMapUrl });
 
 const els = {
   // navigation
@@ -431,6 +434,7 @@ function inlineNodes(runs) {
 
 function elementFor(block) {
   let el;
+  if (block.type === 'image' && block.pdf) return pdfFigures.mount(block, els.scroller);
   if (block.type === 'image') {
     el = document.createElement('figure');
     el.className = 'image-block';
@@ -624,6 +628,7 @@ function renderArticle({ article, pdfData = null, libraryItemId = null, isSaved 
   setSavedUi(isSaved);
   applyNotesPaneVisibility();
 
+  pdfFigures.attach(pdfData); // before the blocks are built: figures draw themselves from this file
   const hasPdfPreview = Boolean(pdfData && article.pdfPageCount);
   if (hasPdfPreview) {
     pdfPreviewState = { data: pdfData, pageCount: article.pdfPageCount, nextPage: 1, document: null, documentPromise: null, objectUrls: [], loading: false };

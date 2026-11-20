@@ -1148,3 +1148,16 @@ a.wikilink:hover, a.hashtag:hover { background: color-mix(in srgb, var(--accent)
 .palette-note { margin: 0; padding: 0.5rem 1rem; border-top: 1px solid var(--line); color: var(--ink-dim); font-size: 0.74rem; }
 @keyframes found-flash { 0%, 60% { background: color-mix(in srgb, var(--accent) 28%, transparent); } 100% { background: transparent; } }
 .block.found { animation: found-flash 2.4s ease-out; border-radius: 10px; }
+
+/* ---- PDF figures, tables and equations cropped from the page ---- */
+.pdf-figure { display: block; margin: 1.4rem auto; position: relative; background: #fff; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; cursor: zoom-in; box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
+.pdf-figure img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.pdf-figure { max-width: 100%; }
+.pdf-figure.is-zoomed { width: 100% !important; cursor: zoom-out; }
+.pdf-figure.pdf-figure-equation { border: 0 !important; box-shadow: none !important; background: transparent !important; border-radius: 0; cursor: default; margin: .6rem auto; }
+.pdf-figure-equation img { mix-blend-mode: multiply; }
+:root[data-theme="dark"] .pdf-figure-equation img { mix-blend-mode: screen; filter: invert(1) hue-rotate(180deg); }
+.pdf-figure.is-loading { background: linear-gradient(100deg, rgba(128, 128, 128, .10) 30%, rgba(128, 128, 128, .20) 50%, rgba(128, 128, 128, .10) 70%) 0 0 / 200% 100%; animation: pdf-figure-shimmer 1.4s linear infinite; }
+.pdf-figure.is-failed { display: flex; align-items: center; justify-content: center; text-align: center; padding: 1rem; min-height: 4rem; font: .85rem/1.4 var(--sans); color: var(--ink-dim); background: transparent; border-style: dashed; cursor: default; aspect-ratio: auto !important; }
+@keyframes pdf-figure-shimmer { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .pdf-figure.is-loading { animation: none; } }

@@ -6,7 +6,8 @@ const { attachContextMenu } = require('./lib/context-menu');
 const path = require('path');
 const { loadArticle } = require('./lib/loader');
 const { TtsWorker } = require('./lib/tts-worker');
-const { textToArticle, segmentsToArticle } = require('./lib/extract');
+const { textToArticle, splitIntoChunks } = require('./lib/extract');
+const { readPdf } = require('./lib/pdf-reader');
 const { LibraryStore } = require('./lib/library-store');
 const { SearchIndex } = require('./lib/search');
 const { Embedder } = require('./lib/embedder');
@@ -262,86 +263,6 @@ function joinWrappedLines(lines) {
 
 // ---------------------------------------------------------------- PDF reading
 
-const MONO_FONT = /mono|courier|console|menlo|typewriter|inconsolata|source.?code/i;
-const CODE_SYNTAX = /^\s*(?:[#\\/]{1,2}|(?:if|else|elif|for|while|return|def|class|function|const|let|var|import|export|public|private|static|void|int|float|using)\b)|(?:=>|==|!=|&&|\|\||[{};]\s*$)/;
-const SENTENCE_END = /[.!?:"')”’]$/;
-
-/** Reads one page into lines carrying vertical position and width, so paragraphs can be rebuilt. */
-async function readPageLines(page) {
-  const content = await page.getTextContent();
-  const lines = [];
-  let cur = null;
-  const flush = () => {
-    if (cur && cur.text.trim()) {
-      lines.push({
-        text: cur.text.replace(/\s+$/, ''),
-        y: cur.y,
-        h: cur.h || 10,
-        w: cur.w,
-        code: (cur.mono && cur.hasFont) || CODE_SYNTAX.test(cur.text),
-      });
-    }
-    cur = null;
-  };
-  for (const item of content.items) {
-    if (!('str' in item)) continue;
-    if (!cur) cur = { text: '', y: null, h: 0, w: 0, mono: true, hasFont: false };
-    if (item.str.trim()) {
-      const fontName = `${item.fontName || ''} ${content.styles?.[item.fontName]?.fontFamily || ''}`;
-      cur.mono = cur.mono && MONO_FONT.test(fontName);
-      cur.hasFont = true;
-      if (cur.y === null) cur.y = item.transform?.[5] ?? 0;
-      cur.h = Math.max(cur.h, item.height || 0);
-    }
-    cur.text += item.str;
-    cur.w += item.width || 0;
-    if (item.hasEOL) flush();
-    else cur.text += ' ';
-  }
-  flush();
-  return lines;
-}
-
-/** Turns page lines into prose paragraphs and code runs. */
-function linesToSegments(lines) {
-  const segments = [];
-  const maxWidth = lines.reduce((m, l) => Math.max(m, l.w), 0);
-  let prose = [];
-  let code = [];
-  let prev = null;
-
-  const flushProse = () => {
-    const text = joinWrappedLines(prose.map((l) => l.text));
-    if (text) segments.push({ type: 'text', text });
-    prose = [];
-  };
-  const flushCode = () => {
-    if (code.length) segments.push({ type: 'code', text: code.map((l) => l.text).join('\n') });
-    code = [];
-  };
-
-  for (const line of lines) {
-    if (line.code) {
-      flushProse();
-      code.push(line);
-      prev = line;
-      continue;
-    }
-    flushCode();
-    if (prev && !prev.code && prose.length) {
-      const gap = Math.abs((prev.y ?? 0) - (line.y ?? 0));
-      const bigGap = gap > Math.max(prev.h, line.h) * 1.7;
-      const shortLineEnd = prev.w < maxWidth * 0.6 && SENTENCE_END.test(prev.text.trim());
-      if (bigGap || shortLineEnd) flushProse();
-    }
-    prose.push(line);
-    prev = line;
-  }
-  flushCode();
-  flushProse();
-  return segments;
-}
-
 async function loadPdfFromPath(filePath) {
   if (path.extname(filePath).toLowerCase() !== '.pdf') throw new Error('That file is not a PDF.');
   const stat = await fs.promises.stat(filePath);
@@ -361,22 +282,15 @@ async function loadPdfFromPath(filePath) {
       isEvalSupported: false,
     }).promise;
 
-    const segments = [];
-    for (let n = 1; n <= pdfDoc.numPages; n += 1) {
-      if (n === 1 || n % 5 === 0 || n === pdfDoc.numPages) {
-        sendToWindow('reader:status', `Reading PDF text, page ${n} of ${pdfDoc.numPages}…`);
-      }
-      const page = await pdfDoc.getPage(n);
-      try {
-        segments.push(...linesToSegments(await readPageLines(page)));
-      } finally {
-        page.cleanup();
-      }
-    }
-
     const metadata = await pdfDoc.getMetadata().catch(() => null);
-    const title = metadata?.info?.Title?.trim() || path.basename(filePath);
-    const article = segmentsToArticle(segments, title);
+    const metaTitle = String(metadata?.info?.Title || '').trim();
+    const usableMeta = metaTitle.length >= 4 && !/\.(docx?|tex|pdf|indd|pages|odt)$|^(microsoft word|untitled|document\d*)\b/i.test(metaTitle);
+    const article = await readPdf(pdfDoc, {
+      pdfjs,
+      title: usableMeta ? metaTitle : path.basename(filePath, path.extname(filePath)),
+      tools: { splitIntoChunks },
+      onProgress: (n, total) => sendToWindow('reader:status', `Reading PDF, page ${n} of ${total}…`),
+    });
     article.hasSelectableText = article.contentWords > 0;
     if (!article.hasSelectableText && article.blocks[0]) {
       article.blocks[0].speak = false;
@@ -573,12 +487,12 @@ function urlFromArgs(argv) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1580,
-    height: 960,
+    width: 1280,
+    height: 860,
     minWidth: 720,
     minHeight: 540,
     title: 'voxo',
-    icon: path.join(__dirname, 'assets', 'icon.svg'),
+    icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -589,6 +503,9 @@ function createWindow() {
     },
   });
   attachContextMenu(mainWindow.webContents);
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(path.join(__dirname, 'assets', 'icon.png'));
+  }
   mainWindow.setMenuBarVisibility(false);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
