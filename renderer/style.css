@@ -480,8 +480,9 @@ body.no-reading .dock { display: none; }
   font: 0.78rem/1.68 var(--mono); cursor: default;
 }
 #body pre.block::before { content: "CODE"; display: block; margin-bottom: 0.55rem; color: var(--ink-dim); font: 700 0.62rem/1 var(--sans); letter-spacing: 0.12em; }
-#body figure.image-block { margin: 1.8rem 0 2.2rem; padding: 0.55rem; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); cursor: default; }
-#body figure.image-block img { display: block; width: auto; max-width: 100%; max-height: min(72vh, 38rem); margin-inline: auto; object-fit: contain; border-radius: 8px; }
+#body figure.image-block { margin: 1.8rem 0 2.2rem; padding: 0.4rem; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); cursor: default; }
+#body figure.image-block img { display: block; width: 100%; height: auto; max-width: 100%; margin-inline: auto; object-fit: contain; border-radius: 8px; }
+#body figure.image-block.is-small img { width: auto; } /* tiny images (icons, badges) are not stretched */
 #body figure.image-unavailable { padding: 0.65rem 0.8rem; border: 1px dashed var(--line-strong); border-radius: 8px; background: var(--panel); color: var(--ink-dim); font: 0.86rem/1.5 var(--sans); }
 
 .pdf-preview { margin: 0 0 1.8rem; padding: 0.85rem 1rem; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink-secondary); font: 0.86rem/1.4 var(--sans); }
@@ -1056,7 +1057,7 @@ body::before {
 .discover-tabs .chip { display: inline-flex; align-items: center; gap: 0.35rem; }
 .discover-tabs .chip .ico { width: 0.85rem; height: 0.85rem; }
 .discover-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr)); gap: 0.8rem; }
-.discover-card { display: grid; align-content: start; gap: 0.45rem; padding: 0.95rem 1rem; text-align: left; border: 1px solid var(--line); border-radius: 16px; background: var(--glass, var(--panel)); backdrop-filter: blur(14px); transition: transform 140ms, border-color 140ms, box-shadow 140ms; }
+.discover-card { text-align: left; border: 1px solid var(--line); border-radius: 16px; background: var(--glass, var(--panel)); backdrop-filter: blur(14px); transition: transform 140ms, border-color 140ms, box-shadow 140ms; }
 .discover-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: var(--shadow-md, var(--shadow-sm)); }
 .discover-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.55rem; color: var(--ink-dim); font-size: 0.7rem; font-weight: 600; }
 .discover-meta span:first-child { color: var(--accent); }
@@ -1161,3 +1162,68 @@ a.wikilink:hover, a.hashtag:hover { background: color-mix(in srgb, var(--accent)
 .pdf-figure.is-failed { display: flex; align-items: center; justify-content: center; text-align: center; padding: 1rem; min-height: 4rem; font: .85rem/1.4 var(--sans); color: var(--ink-dim); background: transparent; border-style: dashed; cursor: default; aspect-ratio: auto !important; }
 @keyframes pdf-figure-shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .pdf-figure.is-loading { animation: none; } }
+
+/* ---------------------------------------------------------------- markdown editor */
+.md-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.1rem; padding: 0.25rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-subtle); }
+.md-tool { display: grid; place-items: center; width: 1.9rem; height: 1.9rem; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--ink-secondary); }
+.md-tool .ico { width: 0.95rem; height: 0.95rem; }
+.md-tool:hover { background: var(--panel); color: var(--accent); box-shadow: var(--shadow-sm); }
+.md-tool-sep { width: 1px; height: 1.1rem; margin: 0 0.25rem; background: var(--line-strong); }
+.md-editor { display: grid; gap: 0.8rem; min-height: 16rem; flex: 1; }
+.md-editor[data-mode="split"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.md-editor[data-mode="split"] .md-preview { padding-left: 0.9rem; border-left: 1px solid var(--line); overflow-y: auto; }
+.md-editor textarea { min-width: 0; }
+.md-editor[data-mode="write"] .md-preview, .md-editor[data-mode="preview"] textarea { display: none; }
+.md-editor-dialog { min-height: min(40vh, 18rem); }
+.md-editor-dialog .modal-textarea { min-height: min(40vh, 18rem); }
+.md-editor-dialog .md-preview { max-height: 56vh; overflow-y: auto; padding: 0.85rem 0.95rem; border: 1px solid var(--line); border-radius: 11px; background: var(--paper); font: 1rem/1.6 var(--serif); }
+.md hr { border: 0; border-top: 1px solid var(--line-strong); margin: 0.9rem 0; }
+.md del { color: var(--ink-dim); }
+.md blockquote { margin-left: 0; }
+.md li.task input { cursor: pointer; }
+.modal-wide .md-toolbar { margin-bottom: 0.1rem; }
+
+/* ---------------------------------------------------------------- save a passage into a note you already have */
+.note-target { display: grid; gap: 0.35rem; }
+.note-target-row { display: flex; align-items: center; gap: 0.5rem; color: var(--ink-dim); font-size: 0.74rem; font-weight: 600; }
+.note-target-row > span { flex: none; min-width: 3.1rem; }
+.note-target-row .select { flex: 1; min-width: 0; max-width: 100%; }
+.selection-toolbar .toolbar-btn { white-space: nowrap; }
+
+/* ---------------------------------------------------------------- Discover: cards with quick controls, and the page */
+.discover-card { position: relative; padding: 0; overflow: hidden; display: flex; flex-direction: column; align-content: stretch; gap: 0; }
+.discover-body { display: grid; align-content: start; gap: 0.45rem; padding: 0.95rem 1rem 1rem; }
+.discover-open { position: absolute; inset: 0; z-index: 1; border: 0; background: transparent; border-radius: inherit; cursor: pointer; }
+.discover-card.skeleton { padding: 0; }
+.discover-pic { aspect-ratio: 16 / 9; background: var(--surface-subtle); overflow: hidden; }
+.discover-pic img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform 300ms var(--ease); }
+.discover-card:hover .discover-pic img { transform: scale(1.04); }
+.discover-tools {
+  position: absolute; top: 0.55rem; right: 0.55rem; z-index: 2; display: flex; gap: 0.15rem; padding: 0.2rem;
+  border: 1px solid var(--glass-edge, var(--line-strong)); border-radius: 999px; background: var(--glass-strong, var(--panel));
+  backdrop-filter: blur(16px) saturate(1.5); box-shadow: var(--shadow); opacity: 0; transform: translateY(-4px);
+  transition: opacity 140ms, transform 140ms var(--ease); pointer-events: none;
+}
+.discover-card:hover .discover-tools, .discover-card:focus-within .discover-tools { opacity: 1; transform: none; pointer-events: auto; }
+@media (hover: none) { .discover-tools { opacity: 1; transform: none; pointer-events: auto; } }
+.discover-tool { display: grid; place-items: center; width: 1.9rem; height: 1.9rem; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ink-secondary); }
+.discover-tool .ico { width: 0.95rem; height: 0.95rem; }
+.discover-tool:hover { background: var(--tint); color: var(--accent); }
+.discover-tool[aria-pressed="true"] { color: var(--accent); }
+.discover-tool[aria-pressed="true"] svg path { fill: currentColor; }
+.discover-tool.is-busy { animation: voice-pulse 0.9s ease-in-out infinite; }
+.discover-listen { display: none; }
+.icon-btn.is-spinning .ico { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.discover-shell { max-width: 80rem; }
+.discover-page-head { align-items: flex-end; margin-bottom: 0.9rem; }
+.discover-stamp { margin: 0.3rem 0 0; color: var(--ink-dim); font-size: 0.74rem; }
+.discover-page-tools { display: flex; align-items: center; gap: 0.6rem; }
+.discover-page-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding-bottom: 0.75rem; border-bottom: 1px solid var(--line); margin-bottom: 1rem; }
+.discover-page-body { padding-bottom: 7rem; }
+.discover-grid-page { grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: 1rem; }
+.discover-page-body .discover-more { margin: 1.2rem auto 0; display: flex; }
+.discover-card:not(.has-image) .discover-body { padding-bottom: 3.3rem; }
+.discover-card:not(.has-image) .discover-tools { top: auto; bottom: 0.6rem; transform: translateY(4px); }
+.discover-card:not(.has-image):hover .discover-tools, .discover-card:not(.has-image):focus-within .discover-tools { transform: none; }
+.discover-card { min-height: 9rem; }

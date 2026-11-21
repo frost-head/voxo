@@ -2,11 +2,20 @@
 // note text can contain anything without being able to inject markup or script.
 
 // [[Wiki links]] and #tags are recognised first; the rest is classic inline Markdown.
-const INLINE_SOURCE = /(\[\[([^\]\n|]{1,120})(?:\|([^\]\n]{1,120}))?\]\]|(?<![\p{L}\p{N}&/#_-])#([\p{L}][\p{L}\p{N}_-]{1,30})|\*\*([^*\n]+)\*\*|__([^_\n]+)__|\*([^*\n]+)\*|_([^_\n]+)_|`([^`\n]+)`|\[([^\]\n]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\))/gu;
+const INLINE_SOURCE = /(\[\[([^\]\n|]{1,120})(?:\|([^\]\n]{1,120}))?\]\]|(?<![\p{L}\p{N}&/#_-])#([\p{L}][\p{L}\p{N}_-]{1,30})|\*\*([^*\n]+)\*\*|__([^_\n]+)__|\*([^*\n]+)\*|_([^_\n]+)_|`([^`\n]+)`|\[([^\]\n]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\)|~~([^~\n]+)~~)/gu;
 
 // The app registers what a click on a link or tag should do, and how to tell whether a link points at something real.
 const handlers = { wikilink: null, tag: null, resolve: null };
 export function setLinkHandlers(next) { Object.assign(handlers, next); }
+
+const KEYED = /^([na])-([0-9a-f]{6,16})(?:#(\d{1,6}))?$/i;
+
+/** [[n-3f2a91bc04d1|Name]] holds a key; [[Some title]] is an older link written by name. */
+export function parseWikiTarget(target) {
+  const m = KEYED.exec(String(target || '').trim());
+  if (!m) return { key: null, name: String(target || '').trim() };
+  return { key: m[2].toLowerCase(), type: m[1].toLowerCase() === 'a' ? 'article' : 'note', blockIndex: m[3] ? Number(m[3]) : null, name: '' };
+}
 
 /** Every [[target]] in a piece of text, in order, de-duplicated. */
 export function extractWikiLinks(text) {
@@ -16,6 +25,19 @@ export function extractWikiLinks(text) {
     if (target && !out.some((t) => t.toLowerCase() === target.toLowerCase())) out.push(target);
   }
   return out;
+}
+
+/** Rewrites links written by name ([[Title]]) into key links, wherever the app can tell what they point at. */
+export function upgradeWikiLinks(text, resolve) {
+  let changed = false;
+  const next = String(text || '').replace(/\[\[([^\]\n|]{1,120})(?:\|([^\]\n]{1,120}))?\]\]/g, (whole, target, label) => {
+    if (parseWikiTarget(target).key) return whole;
+    const hit = resolve(target.trim());
+    if (!hit || hit.type === 'tag' || !hit.token) return whole;
+    changed = true;
+    return `[[${hit.token.split('|')[0]}|${(label || hit.label).trim()}]]`;
+  });
+  return { text: next, changed };
 }
 
 export function renderInline(text, parent) {
@@ -28,14 +50,20 @@ export function renderInline(text, parent) {
     let el;
     if (match[2] !== undefined) {
       const target = match[2].trim();
+      const stored = (match[3] || '').trim();
+      const hit = handlers.resolve ? handlers.resolve(target) : undefined; // an object, or null when it points at nothing
       el = document.createElement('a');
       el.href = '#';
       el.className = 'wikilink';
       el.dataset.target = target;
-      el.textContent = (match[3] || target).trim();
-      el.title = `Open “${target}”`;
-      if (handlers.resolve && !handlers.resolve(target)) { el.classList.add('is-missing'); el.title = `“${target}” does not exist yet. Click to create it.`; }
-      el.addEventListener('click', (event) => { event.preventDefault(); handlers.wikilink?.(target); });
+      // The name shown is the CURRENT title of what the link points at, so a rename is reflected everywhere.
+      el.textContent = (parseWikiTarget(target).key && hit?.label) || stored || (parseWikiTarget(target).key ? 'Missing note' : target);
+      el.title = `Open “${el.textContent}”`;
+      if (handlers.resolve && !hit) {
+        el.classList.add('is-missing');
+        el.title = parseWikiTarget(target).key ? 'This note or reading was deleted.' : `“${target}” does not exist yet. Click to create it.`;
+      }
+      el.addEventListener('click', (event) => { event.preventDefault(); handlers.wikilink?.(target, stored); });
     } else if (match[4] !== undefined) {
       const tagName = match[4].toLowerCase(); // captured now: `match` changes on the next loop
       el = document.createElement('a');
@@ -54,6 +82,9 @@ export function renderInline(text, parent) {
     } else if (match[9] !== undefined) {
       el = document.createElement('code');
       el.textContent = match[9];
+    } else if (match[12] !== undefined) {
+      el = document.createElement('del');
+      renderInline(match[12], el);
     } else {
       el = document.createElement('a');
       el.href = match[11];
@@ -69,7 +100,7 @@ export function renderInline(text, parent) {
 }
 
 /** @returns {DocumentFragment} */
-export function renderMarkdown(source) {
+export function renderMarkdown(source, { onToggleTask = null } = {}) {
   const fragment = document.createDocumentFragment();
   const lines = String(source || '').replace(/\r\n?/g, '\n').split('\n');
   let i = 0;
@@ -80,11 +111,14 @@ export function renderMarkdown(source) {
   const isQuote = (l) => /^\s*>/.test(l);
   const isHeading = (l) => /^#{1,4}\s+/.test(l);
   const isFence = (l) => /^```/.test(l.trim());
-  const startsBlock = (l) => isBullet(l) || isNumbered(l) || isQuote(l) || isHeading(l) || isFence(l);
+  const isRule = (l) => /^\s*([-*_])(\s*\1){2,}\s*$/.test(l);
+  const startsBlock = (l) => isBullet(l) || isNumbered(l) || isQuote(l) || isHeading(l) || isFence(l) || isRule(l);
+  const depthOf = (l) => Math.min(6, Math.floor(l.match(/^[ \t]*/)[0].replace(/\t/g, '  ').length / 2));
 
   while (i < lines.length) {
     const line = lines[i];
     if (isBlank(line)) { i += 1; continue; }
+    if (isRule(line) && !isBullet(line)) { fragment.append(document.createElement('hr')); i += 1; continue; }
 
     if (isFence(line)) {
       const code = [];
@@ -111,13 +145,17 @@ export function renderMarkdown(source) {
       const list = document.createElement(ordered ? 'ol' : 'ul');
       while (i < lines.length && (ordered ? isNumbered(lines[i]) : isBullet(lines[i]))) {
         const li = document.createElement('li');
+        const lineNo = i;
+        const depth = depthOf(lines[i]);
+        if (depth) li.style.setProperty('margin-left', `${depth * 1.1}rem`);
         let text = lines[i].replace(ordered ? /^\s*\d+[.)]\s+/ : /^\s*[-*+]\s+/, '');
         const task = text.match(/^\[( |x|X)\]\s+(.*)$/);
         if (task) {
           const box = document.createElement('input');
           box.type = 'checkbox';
-          box.disabled = true;
+          box.disabled = !onToggleTask;
           box.checked = task[1].toLowerCase() === 'x';
+          if (onToggleTask) box.addEventListener('change', () => onToggleTask(lineNo, box.checked));
           li.append(box, ' ');
           text = task[2];
           li.className = 'task';

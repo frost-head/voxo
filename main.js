@@ -6,7 +6,8 @@ const { attachContextMenu } = require('./lib/context-menu');
 const path = require('path');
 const { loadArticle } = require('./lib/loader');
 const { TtsWorker } = require('./lib/tts-worker');
-const { textToArticle, splitIntoChunks } = require('./lib/extract');
+const { splitIntoChunks } = require('./lib/extract');
+const { markdownToArticle, notesToArticle, titleFromMarkdown } = require('./lib/markdown-blocks');
 const { readPdf } = require('./lib/pdf-reader');
 const { LibraryStore } = require('./lib/library-store');
 const { SearchIndex } = require('./lib/search');
@@ -28,7 +29,7 @@ const PDF_STANDARD_FONT_DATA_URL = path.join(PDFJS_RESOURCES, 'standard_fonts') 
 const PDF_CMAP_URL = path.join(PDFJS_RESOURCES, 'cmaps') + path.sep;
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) ' +
-  'Chrome/130.0.0.0 Safari/537.36 voxo/0.2';
+  'Chrome/130.0.0.0 Safari/537.36 voxo/0.5';
 const FETCH_TIMEOUT_MS = 20000;
 const MAX_PDF_BYTES = 200 * 1024 * 1024;
 
@@ -322,12 +323,43 @@ ipcMain.handle('reader:load', async (_event, input) => {
   }
 });
 
+// Pasted or written text is Markdown: headings, lists, quotes and emphasis are shown properly and never read out as symbols.
 ipcMain.handle('reader:text', (_event, text) => {
   try {
-    const article = textToArticle(text, titleFromText(text));
+    const article = markdownToArticle(text, titleFromMarkdown(text));
     return { ok: true, article, ...recordInLibrary({ type: 'text', article, text }) };
   } catch (err) {
     return { ok: false, error: err.message || String(err) };
+  }
+});
+
+// Your notes, read aloud. Nothing is added to the library: it is a listening session, not a new reading.
+ipcMain.handle('reader:notes', (_event, { title, notes } = {}) => {
+  try {
+    const list = (Array.isArray(notes) ? notes : []).slice(0, 300).map((n) => ({
+      heading: String(n?.heading || '').slice(0, 200),
+      source: String(n?.source || '').slice(0, 300),
+      quote: String(n?.quote || '').slice(0, 4000),
+      body: String(n?.body || '').slice(0, 40000),
+    }));
+    if (!list.length) throw new Error('There are no notes to read.');
+    const article = list.length === 1 && !list[0].quote && !list[0].source
+      ? markdownToArticle(list[0].body, list[0].heading || 'Untitled note')
+      : notesToArticle(list, String(title || 'Your notes').slice(0, 120));
+    return { ok: true, article, libraryItemId: null, isSaved: false, notes: [] };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
+ipcMain.handle('app:open-external', (_event, url) => {
+  try {
+    const parsed = new URL(String(url));
+    if (!['http:', 'https:'].includes(parsed.protocol)) return { ok: false, error: 'Only web addresses can be opened.' };
+    shell.openExternal(parsed.href);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'That is not a web address.' };
   }
 });
 

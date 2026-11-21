@@ -5,6 +5,7 @@ import {
 } from './common.js';
 import { renderMarkdown, extractWikiLinks } from './markdown.js';
 import { linkIndex } from './links.js';
+import { createMarkdownEditor } from './md-editor.js';
 import { icon } from './icons.js';
 
 const STANDALONE = 'standalone';
@@ -60,7 +61,7 @@ export const plain = (text) => String(text || '')
 const firstLine = (text) => plain(text).split('\n').map((l) => l.trim()).find(Boolean) || '';
 export const noteHeading = (note) => note.title || firstLine(note.body) || firstLine(note.quote).slice(0, 80) || 'Untitled note';
 
-export function initNotesWorkspace({ openSource, openTopic = () => {}, openArticle = () => {} }) {
+export function initNotesWorkspace({ openSource, openTopic = () => {}, openArticle = () => {}, listenNotes = () => {} }) {
   const el = {
     smartList: $('#nw-smart-list'), notebookList: $('#nw-notebook-list'), tagList: $('#nw-tag-list'),
     newNotebook: $('#nw-new-notebook'), listTitle: $('#nw-list-title'), exportList: $('#nw-export'), newNote: $('#ws-new-note'),
@@ -69,7 +70,7 @@ export function initNotesWorkspace({ openSource, openTopic = () => {}, openArtic
     openSource: $('#ws-open-source'), pin: $('#ws-pin'), exportOne: $('#ws-export-one'), del: $('#ws-delete'),
     title: $('#ws-note-title'), colors: $('#ws-colors'), notebookSelect: $('#ws-notebook-select'),
     tagChips: $('#ws-tag-chips'), tagInput: $('#ws-tag-input'), tagSuggestions: $('#ws-tag-suggestions'),
-    quote: $('#ws-quote'), tabWrite: $('#ws-tab-write'), tabPreview: $('#ws-tab-preview'), wordCount: $('#ws-word-count'),
+    quote: $('#ws-quote'), tabWrite: $('#ws-tab-write'), tabSplit: $('#ws-tab-split'), tabPreview: $('#ws-tab-preview'), toolbar: $('#ws-md-toolbar'), mdBox: $('#ws-md-editor'), listen: $('#ws-listen'), listenList: $('#nw-listen'), wordCount: $('#ws-word-count'),
     body: $('#ws-note-body'), preview: $('#ws-preview'),
     smart: $('#nw-smart'), smartNote: $('#nw-smart-note'), group: $('#nw-group'), links: $('#ws-links'), wlSuggest: $('#ws-wl-suggest'),
     sourceList: $('#nw-source-list'), suggest: $('#nw-suggest'), tagMode: $('#nw-tag-mode'), selectToggle: $('#nw-select-toggle'), activeFilters: $('#nw-active-filters'), bulk: $('#nw-bulk'),
@@ -185,6 +186,19 @@ export function initNotesWorkspace({ openSource, openTopic = () => {}, openArtic
     if (!pending) return;
     const { id, patch } = pending;
     pending = null;
+    if (typeof patch.body === 'string' && patch.body.includes('[[')) {
+      // Links typed by name become key links, so renaming the target later cannot break them.
+      const upgraded = linkIndex.upgrade(patch.body);
+      if (upgraded.changed) {
+        if (id === st.activeId && el.body.value === patch.body) {
+          const fromEnd = el.body.value.length - el.body.selectionStart;
+          el.body.value = upgraded.text;
+          const pos = Math.max(0, upgraded.text.length - fromEnd);
+          el.body.setSelectionRange(pos, pos);
+        }
+        patch.body = upgraded.text;
+      }
+    }
     setSaveState('Saving…');
     const res = await api.updateNote(id, patch);
     if (!res.ok) { showError(res.error); setSaveState('Not saved'); return; }
@@ -241,7 +255,7 @@ export function initNotesWorkspace({ openSource, openTopic = () => {}, openArtic
     const kindCount = (id) => countWhere('kind', (n) => id === 'all' || kindOf(n) === id);
     const rows = KINDS.map((k) => navButton(
       k.label, kindCount(k.id), st.f.kind === k.id,
-      () => changeFilters((f) => { f.kind = k.id; }),
+      () => changeFilters((f) => { f.kind = f.kind === k.id && k.id !== 'all' ? 'all' : k.id; }), // click again to deselect
     ));
     rows.push(navButton('Pinned', countWhere('pinned', (n) => n.pinned), st.f.pinned, () => changeFilters((f) => { f.pinned = !f.pinned; })));
     el.smartList.replaceChildren(...rows);
@@ -808,18 +822,29 @@ export function initNotesWorkspace({ openSource, openTopic = () => {}, openArtic
   });
   el.tagInput.addEventListener('blur', addTagFromInput);
 
-  function setMode(mode) {
-    const preview = mode === 'preview';
-    el.tabWrite.setAttribute('aria-selected', String(!preview));
-    el.tabPreview.setAttribute('aria-selected', String(preview));
-    el.body.hidden = preview;
-    el.preview.hidden = !preview;
-    if (preview) {
-      el.preview.replaceChildren(el.body.value.trim() ? renderMarkdown(el.body.value) : Object.assign(document.createElement('p'), { className: 'md-empty', textContent: 'Nothing to preview yet.' }));
-    }
-  }
-  el.tabWrite.addEventListener('click', () => setMode('write'));
-  el.tabPreview.addEventListener('click', () => setMode('preview'));
+  const editor = createMarkdownEditor({
+    textarea: el.body, preview: el.preview, toolbar: el.toolbar, container: el.mdBox,
+    modeButtons: { write: el.tabWrite, split: el.tabSplit, preview: el.tabPreview },
+  });
+  const setMode = (mode) => editor.setMode(mode);
+  setMode(['write', 'split', 'preview'].includes(store.get('notes.editorMode', 'write')) ? store.get('notes.editorMode', 'write') : 'write');
+  for (const [name, button] of [['write', el.tabWrite], ['split', el.tabSplit], ['preview', el.tabPreview]]) button.addEventListener('click', () => store.set('notes.editorMode', name));
+
+  // Listen: one note, or every note in the list as you see it now.
+  const spoken = (n) => ({ heading: noteHeading(n), source: n.itemId === STANDALONE ? '' : `From ${n.sourceTitle || 'a reading'}.`, quote: n.quote, body: n.body });
+  el.listen.addEventListener('click', async () => {
+    const note = active();
+    if (!note) return;
+    await flush();
+    listenNotes({ title: noteHeading(note), notes: [spoken(active() || note)] });
+  });
+  el.listenList.addEventListener('click', async () => {
+    await flush();
+    const byId = new Map(st.notes.map((n) => [n.id, n]));
+    const ordered = (st.order.length ? st.order.map((id) => byId.get(id)).filter(Boolean) : st.notes);
+    if (!ordered.length) { toast('There are no notes in this list to listen to.'); return; }
+    listenNotes({ title: el.listTitle.textContent || 'Your notes', notes: ordered.map(spoken) });
+  });
 
   function fillEditor() {
     const note = active();
@@ -843,7 +868,7 @@ export function initNotesWorkspace({ openSource, openTopic = () => {}, openArtic
     el.notebookSelect.value = note.notebookId && st.notebooks.some((nb) => nb.id === note.notebookId) ? note.notebookId : '';
     renderTagChips(note.tags);
     setSaveState('');
-    setMode('write');
+    editor.refresh();
     renderLinks();
   }
 
@@ -867,6 +892,14 @@ export function initNotesWorkspace({ openSource, openTopic = () => {}, openArtic
     if (!res.ok) return showError(res.error);
     toast(`Created “${title}”.`);
     await refresh();
+    const from = active();
+    if (from && from.body.includes('[[')) { // point the link that asked for it at the new note by key
+      const upgraded = linkIndex.upgrade(from.body);
+      if (upgraded.changed) {
+        const saved = await api.updateNote(from.id, { body: upgraded.text });
+        if (saved.ok) await refresh();
+      }
+    }
     await goToNote(res.note.id);
   }
 
@@ -903,9 +936,12 @@ export function initNotesWorkspace({ openSource, openTopic = () => {}, openArtic
       sections.push(wrap);
     };
     section('Links to', outgoing.map(({ target, hit }) => {
-      if (!hit) return row('plus', target, 'create this note', () => createLinked(target), 'is-missing');
+      if (!hit) {
+        if (/^[na]-[0-9a-f]{6,16}/i.test(target)) return row('x', 'Deleted note or reading', 'link is broken', () => toast('That note or reading was deleted.'), 'is-missing');
+        return row('plus', target, 'create this note', () => createLinked(target), 'is-missing');
+      }
       if (hit.type === 'note') return row('pencil', hit.label, 'note', () => goToNote(hit.id));
-      if (hit.type === 'article') return row('book', hit.label, 'reading', () => openArticle(hit.id));
+      if (hit.type === 'article') return row('book', hit.label, 'reading', () => openArticle(hit.id, hit.blockIndex));
       return row('hash', hit.label, 'topic', () => openTopic(hit.id));
     }));
     section('Linked from', back.map((n) => row('pencil', noteHeading(n), sourceName(n), () => goToNote(n.id))));
@@ -958,7 +994,7 @@ export function initNotesWorkspace({ openSource, openTopic = () => {}, openArtic
     if (!item) return;
     const caret = el.body.selectionStart;
     const after = el.body.value.slice(caret);
-    const insert = `${item.label}]]`;
+    const insert = `${item.token || item.label}]]`;
     el.body.value = el.body.value.slice(0, wl.start) + insert + (after.startsWith(']]') ? after.slice(2) : after);
     const pos = wl.start + insert.length;
     el.body.setSelectionRange(pos, pos);

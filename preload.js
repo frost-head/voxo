@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('readerApi', {
   // reading sources
   loadUrl: (url) => ipcRenderer.invoke('reader:load', url),
   loadText: (text) => ipcRenderer.invoke('reader:text', text),
+  loadNotes: (title, notes) => ipcRenderer.invoke('reader:notes', { title, notes }),
+  openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
   loadPdf: (droppedPath) => ipcRenderer.invoke('reader:pdf', droppedPath),
   pathForFile: (file) => {
     try { return webUtils.getPathForFile(file); } catch { return ''; }

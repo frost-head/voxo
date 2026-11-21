@@ -32,6 +32,9 @@
         <button id="nav-read" class="sidebar-link is-active" type="button" aria-current="page">
           <svg class="ico" data-icon="book"></svg><span class="sidebar-label">Read</span>
         </button>
+        <button id="nav-discover" class="sidebar-link" type="button">
+          <svg class="ico" data-icon="compass"></svg><span class="sidebar-label">Discover</span>
+        </button>
         <button id="nav-notes-workspace" class="sidebar-link" type="button">
           <svg class="ico" data-icon="pencil"></svg><span class="sidebar-label">Notes</span><span id="count-notes" class="sidebar-count" hidden></span>
         </button>
@@ -182,6 +185,9 @@
                 <svg class="ico" data-icon="globe"></svg><span id="lang-chip-label">English</span>
                 <select id="lang-select" aria-label="Reading language"></select>
               </label>
+              <button id="copy-link" class="btn btn-secondary btn-sm" type="button" title="Copy the link to this article (Ctrl/⌘ Shift C)" hidden>
+                <svg class="ico" data-icon="copy"></svg><span>Copy link</span>
+              </button>
               <button id="bookmark-toggle" class="btn btn-secondary btn-sm bookmark-toggle" type="button" aria-pressed="false" title="Save to your archive">
                 <svg class="ico" data-icon="bookmark"></svg><span>Save</span>
               </button>
@@ -233,6 +239,14 @@
           <textarea id="note-body" placeholder="Write a note…  (Markdown supported)" rows="2"></textarea>
           <div id="note-composer-footer" class="note-composer-footer" hidden>
             <div id="composer-colors" class="swatches" role="radiogroup" aria-label="Note color"></div>
+            <div class="note-target">
+              <label class="note-target-row"><span>Save to</span>
+                <select id="note-target" class="select select-sm" aria-label="Where to save this note"></select>
+              </label>
+              <label id="note-where-row" class="note-target-row" hidden><span>Place</span>
+                <select id="note-where" class="select select-sm" aria-label="Where in that note"></select>
+              </label>
+            </div>
             <div class="composer-buttons">
               <span class="hint-text">Ctrl/⌘ Enter to save</span>
               <button id="note-submit" class="btn btn-primary btn-sm" type="submit" disabled>Save note</button>
@@ -286,6 +300,7 @@
               <h2 id="nw-list-title" class="col-title">All notes</h2>
               <div class="nw-list-actions">
                 <button id="nw-select-toggle" class="icon-btn" type="button" aria-pressed="false" title="Select several notes" aria-label="Select several notes"><svg class="ico" data-icon="check"></svg></button>
+                <button id="nw-listen" class="icon-btn" type="button" title="Listen to the notes in this list" aria-label="Listen to the notes in this list"><svg class="ico" data-icon="headphones"></svg></button>
                 <button id="nw-export" class="icon-btn" type="button" title="Export this list as Markdown" aria-label="Export this list as Markdown"><svg class="ico" data-icon="download"></svg></button>
                 <button id="ws-new-note" class="btn btn-primary btn-sm" type="button"><svg class="ico" data-icon="plus"></svg>New note</button>
               </div>
@@ -334,6 +349,7 @@
                 <div class="editor-actions">
                   <span id="ws-save-state" class="save-state" aria-live="polite"></span>
                   <button id="ws-open-source" class="btn btn-secondary btn-sm" type="button" hidden>Open in reader <svg class="ico" data-icon="arrow-right"></svg></button>
+                  <button id="ws-listen" class="btn btn-secondary btn-sm" type="button" title="Listen to this note"><svg class="ico" data-icon="headphones"></svg>Listen</button>
                   <button id="ws-pin" class="icon-btn" type="button" aria-pressed="false" title="Pin to top" aria-label="Pin note"><svg class="ico" data-icon="pin"></svg></button>
                   <button id="ws-export-one" class="icon-btn" type="button" title="Export this note" aria-label="Export this note"><svg class="ico" data-icon="download"></svg></button>
                   <button id="ws-delete" class="icon-btn danger" type="button" title="Delete note (click twice)" aria-label="Delete note"><svg class="ico" data-icon="trash"></svg></button>
@@ -358,12 +374,16 @@
                 <blockquote id="ws-quote" class="ws-quote" hidden></blockquote>
                 <div class="editor-tabs" role="tablist" aria-label="Editor mode">
                   <button id="ws-tab-write" class="tab" type="button" role="tab" aria-selected="true">Write</button>
+                  <button id="ws-tab-split" class="tab" type="button" role="tab" aria-selected="false">Split</button>
                   <button id="ws-tab-preview" class="tab" type="button" role="tab" aria-selected="false">Preview</button>
                   <span id="ws-word-count" class="word-count"></span>
                 </div>
-                <label class="sr-only" for="ws-note-body">Note body</label>
-                <textarea id="ws-note-body" class="ws-note-body-input" placeholder="Start writing…  Markdown works: **bold**, *italic*, `code`, - lists, > quotes"></textarea>
-                <div id="ws-preview" class="md-preview md" hidden></div>
+                <div id="ws-md-toolbar" class="md-toolbar" role="toolbar" aria-label="Formatting"></div>
+                <div id="ws-md-editor" class="md-editor" data-mode="write">
+                  <label class="sr-only" for="ws-note-body">Note body</label>
+                  <textarea id="ws-note-body" class="ws-note-body-input" placeholder="Start writing…  Markdown works: **bold**, *italic*, `code`, - lists, > quotes. Type [[ to link a note or reading."></textarea>
+                  <div id="ws-preview" class="md-preview md" hidden></div>
+                </div>
                 <div id="ws-wl-suggest" class="wl-suggest" role="listbox" hidden></div>
                 <section id="ws-links" class="ws-links" aria-label="Connections" hidden></section>
               </div>
@@ -371,6 +391,9 @@
           </div>
         </div>
       </section>
+
+      <!-- ======================================================== DISCOVER -->
+      <section id="discover-view" class="workspace-view view" aria-label="Discover" hidden></section>
 
       <!-- ======================================================== ARCHIVE -->
       <section id="library-workspace-view" class="workspace-view view" hidden>
@@ -453,6 +476,7 @@
     <div id="selection-colors" class="swatches"></div>
     <span class="toolbar-divider" aria-hidden="true"></span>
     <button id="selection-note" class="toolbar-btn" type="button"><svg class="ico" data-icon="pencil"></svg>Note</button>
+    <button id="selection-add" class="toolbar-btn" type="button" title="Add this passage to a note you already have"><svg class="ico" data-icon="file-plus"></svg>To note…</button>
     <button id="selection-copy" class="toolbar-btn" type="button">Copy</button>
   </div>
 
@@ -496,7 +520,7 @@
     </div>
   </dialog>
 
-  <dialog id="text-dialog" class="modal">
+  <dialog id="text-dialog" class="modal modal-wide">
     <form id="text-form" class="modal-form" method="dialog">
       <div class="modal-header">
         <div>
@@ -505,8 +529,17 @@
         </div>
         <button id="text-cancel" class="icon-btn" type="button" aria-label="Close dialog"><svg class="ico" data-icon="x"></svg></button>
       </div>
-      <label class="sr-only" for="custom-text">Text to read</label>
-      <textarea id="custom-text" class="modal-textarea" placeholder="Paste or write anything you'd like to hear…"></textarea>
+      <div class="editor-tabs" role="tablist" aria-label="Editor mode">
+        <button id="text-tab-write" class="tab" type="button" role="tab" aria-selected="true">Write</button>
+        <button id="text-tab-split" class="tab" type="button" role="tab" aria-selected="false">Split</button>
+        <button id="text-tab-preview" class="tab" type="button" role="tab" aria-selected="false">Preview</button>
+      </div>
+      <div id="text-md-toolbar" class="md-toolbar" role="toolbar" aria-label="Formatting"></div>
+      <div id="text-md-editor" class="md-editor md-editor-dialog" data-mode="write">
+        <label class="sr-only" for="custom-text">Text to read</label>
+        <textarea id="custom-text" class="modal-textarea" placeholder="Paste or write anything you'd like to hear…  Markdown works: # headings, **bold**, - lists, > quotes."></textarea>
+        <div id="text-preview" class="md-preview md" hidden></div>
+      </div>
       <div class="dialog-actions">
         <span id="custom-text-count" class="word-count"></span>
         <span class="hint-text">Ctrl/⌘ Enter</span>
@@ -553,6 +586,7 @@
           <div><dt><kbd>Ctrl/⌘</kbd> <kbd>K</kbd></dt><dd>Quick search: readings, notes, commands</dd></div>
           <div><dt><kbd>Ctrl/⌘</kbd> <kbd>B</kbd></dt><dd>Collapse / expand the sidebar</dd></div>
           <div><dt><kbd>Ctrl/⌘</kbd> <kbd>L</kbd></dt><dd>Add a new reading</dd></div>
+          <div><dt><kbd>Ctrl/⌘</kbd> <kbd>Shift</kbd> <kbd>C</kbd></dt><dd>Copy the link of the article you are reading</dd></div>
           <div><dt><kbd>/</kbd></dt><dd>Search within Notes or Archive</dd></div>
           <div><dt><kbd>Esc</kbd></dt><dd>Close, clear selection, leave focus mode</dd></div>
           <div><dt><kbd>?</kbd></dt><dd>Show this list</dd></div>

@@ -12,6 +12,9 @@ import { addListening, addFinished, addWords, addTopics, topicsOf, getStats } fr
 import { initDiscover } from './discover.js';
 import { initPalette } from './palette.js';
 import { detectLanguage, LANGUAGE_NAMES } from './lang.js';
+import { createMarkdownEditor } from './md-editor.js';
+import { headingsOf, buildEntry, insertEntry } from './note-target.js';
+import { keyFor } from './links.js';
 import { createFigureRenderer } from './pdf-figures.js';
 import { persona, personaLabel } from './voices.js';
 import { createAmbient, SOUNDS } from './ambient.js';
@@ -34,7 +37,7 @@ const pdfFigures = createFigureRenderer({ standardFontDataUrl, cMapUrl });
 
 const els = {
   // navigation
-  navRead: $('#nav-read'), navNotes: $('#nav-notes-workspace'), navLibrary: $('#nav-library-workspace'),
+  navRead: $('#nav-read'), navNotes: $('#nav-notes-workspace'), navLibrary: $('#nav-library-workspace'), navDiscover: $('#nav-discover'), discoverView: $('#discover-view'),
   barTitle: $('#bar-title'), barSub: $('#bar-sub'), omniboxWrap: $('#omnibox-wrap'), barSearch: $('#bar-search'),
   themeToggle: $('#theme-toggle'), focusToggle: $('#focus-toggle'), focusExit: $('#focus-exit'), focusControls: $('#focus-controls'), focusNotes: $('#focus-notes'), sleepPill: $('#sleep-pill'), loader: $('#loader'),
   sidebarToggle: $('#sidebar-toggle'), sidebarSaved: $('#sidebar-saved'), sidebarSavedGroup: $('#sidebar-saved-group'),
@@ -60,6 +63,7 @@ const els = {
   notesPane: $('#notes-pane'), notesPaneClose: $('#notes-pane-close'), paneExport: $('#pane-export'),
   noteForm: $('#note-form'), noteQuote: $('#note-composer-quote'), noteBody: $('#note-body'), noteSubmit: $('#note-submit'),
   noteFooter: $('#note-composer-footer'), composerColors: $('#composer-colors'),
+  copyLink: $('#copy-link'), noteTarget: $('#note-target'), noteWhere: $('#note-where'), noteWhereRow: $('#note-where-row'), selAdd: $('#selection-add'),
   anchorReset: $('#anchor-reset'), anchorDot: $('#anchor-dot'), anchorLabel: $('#anchor-label'),
   notesList: $('#article-notes-list'), notesEmpty: $('#article-notes-empty'),
   // selection toolbar, drop overlay
@@ -111,6 +115,7 @@ const state = {
   detected: null,
   speed: clamp(store.get('speed', 1), 0.6, 2.4, 1),
   libraryItemId: null,
+  url: '',
   title: '',
   isSaved: false,
   view: 'read',
@@ -155,7 +160,23 @@ const notesWorkspace = initNotesWorkspace({
   openSource: (note) => openLibraryItem(note.itemId, note),
   openTopic: (name) => topic.open(name),
   openArticle: (id, blockIndex) => openLibraryItem(id, null, { blockIndex }),
+  listenNotes: (payload) => listenToNotes(payload),
 });
+
+/** Read your own notes aloud. It opens like a reading, but is not added to your library. */
+async function listenToNotes({ title, notes }) {
+  hideError();
+  renderStatus('Preparing your notes…');
+  els.loader.hidden = false;
+  const res = await api.loadNotes(title, notes);
+  els.loader.hidden = true;
+  if (!res.ok) { showError(res.error); setPhase(state.phase); return; }
+  await setView('read');
+  renderArticle(res);
+  els.sourceLabel.textContent = 'Your notes';
+  updateBar();
+  play();
+}
 
 // Topic view + [[wiki links]] + #tags: one place decides what a click on any of them does.
 const topic = initTopic({
@@ -163,14 +184,15 @@ const topic = initTopic({
   openArticle: (id, blockIndex) => openLibraryItem(id, null, { blockIndex }),
 });
 setLinkHandlers({
-  resolve: (target) => Boolean(linkIndex.resolve(target)),
+  resolve: (target) => linkIndex.resolve(target),
   tag: (name) => topic.open(name),
   wikilink: async (target) => {
     const hit = linkIndex.resolve(target);
-    if (hit?.type === 'article') { openLibraryItem(hit.id); return; }
+    if (hit?.type === 'article') { openLibraryItem(hit.id, null, hit.blockIndex ? { blockIndex: hit.blockIndex } : undefined); return; }
     if (hit?.type === 'tag') { topic.open(hit.id); return; }
-    await setView('notes');
-    if (hit?.type === 'note') { await notesWorkspace.goToNote(hit.id); return; }
+    if (hit?.type === 'note') { await setView('notes'); await notesWorkspace.goToNote(hit.id); return; }
+    if (/^[na]-[0-9a-f]{6,16}/i.test(target)) { toast('That note or reading no longer exists.'); return; }
+    await setView('notes'); // a link written by name to something that does not exist yet: create it
     const res = await api.addNote({ itemId: 'standalone', title: target });
     if (!res.ok) { showError(res.error); return; }
     toast(`Created “${target}”.`);
@@ -184,10 +206,35 @@ async function refreshLinkIndex() {
   if (history.ok) linkIndex.setArticles(history.entries);
 }
 
+/** Open a story and start reading it aloud. */
+async function listenToUrl(url) {
+  await setView('read');
+  els.url.value = url;
+  await openUrl(url);
+  play();
+}
+/** Open a story in the background and keep it in your archive, without leaving the page you are on. */
+async function saveStoryToArchive(url) {
+  toast('Saving…', { duration: 15000 });
+  const res = await api.loadUrl(url);
+  if (!res.ok) { toast(`Could not save this story: ${res.error}`, { duration: 5000 }); return false; }
+  if (!res.isSaved && res.libraryItemId) {
+    const toggled = await api.toggleSavedItem(res.libraryItemId);
+    if (!toggled.ok) { toast(toggled.error || 'Could not save this story.'); return false; }
+  }
+  toast(`Saved “${res.article.title}” to your archive.`, { duration: 3500 });
+  refreshHome();
+  return true;
+}
+
 const discover = initDiscover({
   api,
-  root: document.querySelector('#discover-section'),
+  homeRoot: document.querySelector('#discover-section'),
+  pageRoot: els.discoverView,
   openUrl: (url) => { setView('read').then(() => openUrl(url)); },
+  listenUrl: listenToUrl,
+  saveUrl: saveStoryToArchive,
+  openAll: () => setView('discover'),
   getTopics: () => getStats().topics,
 });
 
@@ -203,16 +250,20 @@ async function setView(view) {
   els.scroller.hidden = view !== 'read';
   els.notesView.hidden = view !== 'notes';
   els.libraryView.hidden = view !== 'library';
+  els.discoverView.hidden = view !== 'discover';
   hideSelectionToolbar();
   applyNotesPaneVisibility();
   if (view === 'notes') notesWorkspace.show();
   if (view === 'library') loadLibrary(activeLibrarySection);
+  if (view === 'discover') discover.showPage();
   updateBar();
 }
 
 els.navRead.dataset.view = 'read';
 els.navNotes.dataset.view = 'notes';
 els.navLibrary.dataset.view = 'library';
+els.navDiscover.dataset.view = 'discover';
+els.navDiscover.addEventListener('click', () => setView('discover'));
 els.navRead.addEventListener('click', () => setView('read'));
 els.navNotes.addEventListener('click', () => setView('notes'));
 els.navLibrary.addEventListener('click', () => setView('library'));
@@ -235,7 +286,7 @@ els.shortcutsClose.addEventListener('click', () => els.shortcutsDialog.close());
 
 function updateBar() {
   const reading = state.view === 'read' && !els.article.hidden;
-  const titles = { read: reading ? 'Now reading' : 'Home', notes: 'Notes', library: 'Archive' };
+  const titles = { read: reading ? 'Now reading' : 'Home', discover: 'Discover', notes: 'Notes', library: 'Archive' };
   els.barTitle.textContent = titles[state.view];
   els.barSub.textContent = reading ? els.sourceLabel.textContent : '';
   els.omniboxWrap.hidden = !reading;
@@ -441,11 +492,12 @@ function elementFor(block) {
     const image = document.createElement('img');
     image.alt = block.alt || '';
     if (block.srcSet) image.srcset = block.srcSet;
-    image.sizes = '(max-width: 40rem) calc(100vw - 3rem), (max-width: 73.5rem) 68vw, 50rem';
+    image.sizes = '(max-width: 40rem) calc(100vw - 3rem), (max-width: 73.5rem) 92vw, 70rem';
     image.src = block.src;
     image.loading = 'lazy';
     image.decoding = 'async';
     image.referrerPolicy = 'no-referrer';
+    image.addEventListener('load', () => { if (image.naturalWidth && image.naturalWidth < 360) el.classList.add('is-small'); }, { once: true });
     image.addEventListener('error', () => {
       const caption = document.createElement('figcaption');
       caption.textContent = block.alt ? `Image unavailable: ${block.alt}` : 'Image unavailable';
@@ -646,6 +698,8 @@ function renderArticle({ article, pdfData = null, libraryItemId = null, isSaved 
   }
 
   state.title = article.title || article.url || '';
+  state.url = /^https?:\/\//i.test(article.url || '') ? article.url : '';
+  els.copyLink.hidden = !state.url;
   els.title.textContent = state.title;
   els.title.dataset.title = state.title;
   const metaItems = [
@@ -825,6 +879,7 @@ function showAnchorOnPage(anchor) {
 function pinAnchor(anchor) {
   if (!state.libraryItemId || !anchor) return;
   toggleNotesPane(true);
+  loadNoteTargets();
   pendingNote = { blockIndex: anchor.blockIndex, startOffset: anchor.startOffset, endOffset: anchor.endOffset, quote: anchor.quote };
   showAnchorOnPage(pendingNote);
   const entry = state.blocks[anchor.blockIndex];
@@ -845,9 +900,34 @@ function syncComposerToPlayback() {
   els.anchorDot.classList.remove('is-locked');
 }
 
+// ---- save to: this reading, or a note you already have (a bug log, a research list…)
+let targetNotes = [];
+async function loadNoteTargets() {
+  const res = await api.listNotes({ itemId: 'standalone', limit: 300 });
+  targetNotes = res.ok ? res.notes : [];
+  const want = els.noteTarget.value;
+  els.noteTarget.replaceChildren(new Option('This reading', ''));
+  if (targetNotes.length) {
+    const group = document.createElement('optgroup');
+    group.label = 'Add to one of my notes';
+    for (const n of targetNotes) group.append(new Option(noteHeading(n), n.id));
+    els.noteTarget.append(group);
+  }
+  els.noteTarget.value = targetNotes.some((n) => n.id === want) ? want : '';
+  fillWhere();
+}
+function fillWhere() {
+  const note = targetNotes.find((n) => n.id === els.noteTarget.value);
+  els.noteWhereRow.hidden = !note;
+  if (!note) return;
+  const heads = headingsOf(note.body);
+  els.noteWhere.replaceChildren(new Option('End of the note', '-1'), ...heads.map((h) => new Option(`Under ${'·'.repeat(h.level - 1)}“${h.text}”`, String(h.line))));
+}
+els.noteTarget.addEventListener('change', () => { if (els.noteTarget.value) store.set('ui.noteTarget', els.noteTarget.value); fillWhere(); checkComposer(); });
+
 function checkComposer() {
   const hasText = els.noteBody.value.trim().length > 0;
-  els.noteSubmit.disabled = !hasText;
+  els.noteSubmit.disabled = !hasText && !(els.noteTarget.value && pendingNote);
   const expanded = hasText || Boolean(pendingNote) || document.activeElement === els.noteBody;
   els.noteFooter.hidden = !expanded;
   els.noteBody.rows = expanded ? 3 : 2;
@@ -857,8 +937,42 @@ els.noteBody.addEventListener('input', checkComposer);
 els.noteBody.addEventListener('focus', checkComposer);
 els.anchorReset.addEventListener('click', () => { clearActiveNoteAnchor(); syncComposerToPlayback(); });
 
+/** Adds the pinned passage (and what you wrote) to a note you already have, and highlights the passage in the reading. */
+async function saveToExistingNote(targetId, comment) {
+  const anchor = pendingNote;
+  const target = targetNotes.find((n) => n.id === targetId);
+  if (!anchor?.quote || !target) { showError('Select the passage you want to add first.'); return; }
+  els.noteSubmit.disabled = true;
+  const latest = await api.listNotes({ itemId: 'standalone', ids: [targetId], limit: 1 }); // the note may have been edited since
+  const current = latest.ok && latest.notes[0] ? latest.notes[0] : target;
+  const entry = buildEntry({ quote: anchor.quote, sourceKey: keyFor('article', state.libraryItemId, anchor.blockIndex), sourceTitle: state.title, comment });
+  const updated = await api.updateNote(targetId, { body: insertEntry(current.body, entry, Number(els.noteWhere.value || -1)) });
+  if (!updated.ok) { checkComposer(); showError(updated.error); return; }
+  // The passage stays marked in the reading, so you can see what you have collected.
+  const mark = await api.addNote({
+    itemId: state.libraryItemId, blockIndex: anchor.blockIndex, startOffset: anchor.startOffset, endOffset: anchor.endOffset,
+    quote: anchor.quote, body: '', color: composerColor,
+  });
+  if (mark.ok) currentNotes = sortNotes([...currentNotes, mark.note]);
+  clearActiveNoteAnchor();
+  syncComposerToPlayback();
+  refreshNotesUi();
+  await Promise.all([loadNoteTargets(), refreshLinkIndex(), notesWorkspace.refresh()]);
+  store.set('ui.noteTarget', targetId);
+  els.noteTarget.value = ''; // the next note goes to this reading again, unless you choose otherwise
+  fillWhere();
+  toast(`Added to “${noteHeading(updated.note)}”.`, { duration: 3500 });
+  checkComposer();
+}
+
 async function saveComposerNote() {
   const body = els.noteBody.value.trim();
+  if (els.noteTarget.value && state.libraryItemId) {
+    await saveToExistingNote(els.noteTarget.value, body);
+    els.noteBody.value = '';
+    checkComposer();
+    return;
+  }
   if (!body || !state.libraryItemId) return;
   const anchor = pendingNote || blockAnchor(state.currentBlock >= 0 ? state.currentBlock : Math.max(0, state.blocks.findIndex((b) => b.firstUnit !== null)));
   els.noteSubmit.disabled = true;
@@ -1102,6 +1216,22 @@ els.selNote.addEventListener('click', () => {
   window.getSelection()?.removeAllRanges();
   hideSelectionToolbar();
   pinAnchor(anchor);
+});
+
+els.selAdd.addEventListener('click', async () => {
+  const anchor = toolbarAnchor || selectionAnchor();
+  if (!anchor) return;
+  window.getSelection()?.removeAllRanges();
+  hideSelectionToolbar();
+  pinAnchor(anchor);
+  await loadNoteTargets();
+  if (!els.noteTarget.value && targetNotes.length) {
+    els.noteTarget.value = targetNotes.some((n) => n.id === store.get('ui.noteTarget', '')) ? store.get('ui.noteTarget', '') : targetNotes[0].id;
+    fillWhere();
+  }
+  if (!targetNotes.length) toast('You have no notes of your own yet. Create one in Notes first, then add passages to it.');
+  checkComposer();
+  els.noteTarget.focus();
 });
 
 els.selCopy.addEventListener('click', async () => {
@@ -2333,6 +2463,7 @@ els.pdfOpen.addEventListener('click', () => openPdf());
 
 function openTextDialog(initial = '') {
   if (initial) els.customText.value = initial;
+  textEditor.refresh();
   updateTextCount();
   els.textDialog.showModal();
   els.customText.focus();
@@ -2347,6 +2478,11 @@ els.customText.addEventListener('keydown', (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); els.textForm.requestSubmit(); }
 });
 els.textCancel.addEventListener('click', () => els.textDialog.close());
+const textEditor = createMarkdownEditor({
+  textarea: els.customText, preview: $('#text-preview'), toolbar: $('#text-md-toolbar'), container: $('#text-md-editor'),
+  modeButtons: { write: $('#text-tab-write'), split: $('#text-tab-split'), preview: $('#text-tab-preview') },
+  onChange: () => updateTextCount(),
+});
 els.textForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const text = els.customText.value.trim();
@@ -2463,8 +2599,10 @@ const palette = initPalette({
     { icon: 'sidebar', label: 'Collapse / expand sidebar', hint: 'Ctrl B', run: toggleSidebar },
     { icon: 'globe', label: 'Reading language and voice', keywords: 'language voice spanish french hindi italian portuguese', run: () => els.settingsDialog.showModal() },
     { icon: 'home', label: 'Go to Home', run: goHome },
+    { icon: 'compass', label: 'Go to Discover', run: () => setView('discover') },
     { icon: 'pencil', label: 'Go to Notes', run: () => setView('notes') },
     { icon: 'archive', label: 'Go to Archive', run: () => setView('library') },
+    ...(state.url ? [{ icon: 'link', label: 'Copy link to this reading', hint: 'Ctrl Shift C', keywords: 'url address share', run: copyReadingLink }] : []),
     ...(state.libraryItemId ? [
       { icon: 'message', label: 'Toggle notes pane', hint: 'Ctrl J', run: () => { setView('read'); toggleNotesPane(); } },
       { icon: 'focus', label: 'Focus mode', hint: 'F', run: () => { setView('read').then(enterFocus); } },
@@ -2480,6 +2618,25 @@ els.barSearch.addEventListener('click', () => palette.open());
 function openPalette(query = '') { palette.open(query); }
 els.paletteBtn.addEventListener('click', () => palette.open());
 
+// ---------------------------------------------------------------- copy the link of the reading
+
+async function copyReadingLink() {
+  if (state.view !== 'read' || els.article.hidden) { toast('Open a reading first.'); return; }
+  if (!state.url) { toast(state.title ? 'This reading has no web address (it is a PDF or your own text).' : 'Open a reading first.'); return; }
+  try {
+    await navigator.clipboard.writeText(state.url);
+    toast('Link copied.', { duration: 2200 });
+  } catch {
+    const box = Object.assign(document.createElement('textarea'), { value: state.url });
+    document.body.append(box);
+    box.select();
+    const ok = document.execCommand('copy');
+    box.remove();
+    toast(ok ? 'Link copied.' : 'Could not copy the link.', { duration: 2200 });
+  }
+}
+els.copyLink.addEventListener('click', copyReadingLink);
+
 // ---------------------------------------------------------------- keyboard
 
 function isTyping() {
@@ -2494,6 +2651,7 @@ document.addEventListener('keydown', (event) => {
   if (mod && key === 'b') { event.preventDefault(); toggleSidebar(); return; }
   if (mod && key === 'l') { event.preventDefault(); focusAddReading(); return; }
   if (mod && key === 'k') { event.preventDefault(); if (document.querySelector('dialog[open]')) return; palette.open(); return; }
+  if (mod && event.shiftKey && key === 'c' && !isTyping()) { event.preventDefault(); copyReadingLink(); return; }
   if (mod && key === 'j') { event.preventDefault(); if (state.libraryItemId) { setView('read'); toggleNotesPane(); } return; }
   if (event.key === 'Escape') {
     if (!document.querySelector('dialog[open]')) leaveFocus();

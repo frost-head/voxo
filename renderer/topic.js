@@ -3,6 +3,7 @@
 import { $, api } from './common.js';
 import { icon } from './icons.js';
 import { extractWikiLinks } from './markdown.js';
+import { linkIndex } from './links.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const svg = (name, attrs = {}) => {
@@ -32,7 +33,7 @@ export function initTopic({ openNote, openArticle }) {
     const t = norm(topic);
     const hashtag = new RegExp(`(^|[^\\p{L}\\p{N}&/#_-])#${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}_-])`, 'iu');
     return all.filter((n) => n.tags.includes(t) || norm(n.title || '') === t
-      || extractWikiLinks(n.body).some((l) => norm(l) === t) || hashtag.test(n.body || ''));
+      || extractWikiLinks(n.body).some((l) => norm(linkIndex.nameOf(l)) === t) || hashtag.test(n.body || ''));
   }
 
   async function open(topic) {
@@ -64,7 +65,7 @@ export function initTopic({ openNote, openArticle }) {
     // Related topics: tags that appear on the same notes.
     const co = new Map();
     for (const n of notes) for (const tag of n.tags) if (tag !== norm(name)) co.set(tag, (co.get(tag) || 0) + 1);
-    for (const n of notes) for (const link of extractWikiLinks(n.body)) if (norm(link) !== norm(name)) co.set(norm(link), (co.get(norm(link)) || 0) + 1);
+    for (const n of notes) for (const link of extractWikiLinks(n.body)) { const l = norm(linkIndex.nameOf(link)); if (l !== norm(name)) co.set(l, (co.get(l) || 0) + 1); }
 
     summary.textContent = notes.length || articles.length
       ? `${notes.length} note${notes.length === 1 ? '' : 's'} · ${articles.length} reading${articles.length === 1 ? '' : 's'}`

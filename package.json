@@ -2,7 +2,7 @@
   "name": "voxo",
   "productName": "voxo",
   "author": "frost-head",
-  "version": "0.4.5",
+  "version": "0.5.0",
   "description": "Reads web pages, pasted text and PDFs aloud with local text-to-speech",
   "main": "main.js",
   "private": true,

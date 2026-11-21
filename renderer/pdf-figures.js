@@ -2,7 +2,7 @@
 // The reader stores only where each one is (page + rectangle in PDF points), so the library stays small.
 import * as pdfjsLib from '../node_modules/pdfjs-dist/build/pdf.mjs';
 
-const MAX_WIDTH = 1500; // pixels
+const MAX_WIDTH = 2200; // pixels
 const MIN_WIDTH = 520;
 
 export function createFigureRenderer({ standardFontDataUrl, cMapUrl }) {
@@ -53,7 +53,9 @@ export function createFigureRenderer({ standardFontDataUrl, cMapUrl }) {
     try {
       const width = Math.max(1, x1 - x0);
       const height = Math.max(1, y1 - y0);
-      const target = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width * 2.2 * Math.min(2, window.devicePixelRatio || 1)));
+      // Drawn as sharp as the screen can show it: the figure fills the reading column.
+      const shown = figure.clientWidth || 800;
+      const target = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, shown * Math.min(2, window.devicePixelRatio || 1)));
       const scale = target / width;
       const viewport = page.getViewport({ scale, offsetX: -(x0 - vx0) * scale, offsetY: -(vy1 - y1) * scale });
       const canvas = document.createElement('canvas');
@@ -103,8 +105,9 @@ export function createFigureRenderer({ standardFontDataUrl, cMapUrl }) {
     const width = block.pdf.x1 - block.pdf.x0;
     const height = block.pdf.y1 - block.pdf.y0;
     figure.style.aspectRatio = `${Math.max(1, width)} / ${Math.max(1, height)}`;
-    // Same scale as the paper's own text: a figure that was 20 body-text-widths wide stays 20 widths wide here.
-    figure.style.width = `calc(${(width / (block.pdf.bodyPt || 10)).toFixed(3)} * var(--reading-size, 20px))`;
+    // Figures and tables use the full width of the column. Equations stay at the size of the text around them.
+    if (block.pdf.kind === 'equation') figure.style.width = `calc(${(width / (block.pdf.bodyPt || 10)).toFixed(3)} * var(--reading-size, 20px))`;
+    else figure.style.width = '100%';
     if (!available()) {
       figure.classList.add('is-failed');
       figure.textContent = 'The original PDF is no longer on this computer, so this picture cannot be shown.';
